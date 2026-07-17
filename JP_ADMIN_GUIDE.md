@@ -40,7 +40,9 @@ Their page (`/review/...`) has the player, a **+ Note** button, **Start section 
 ## Delete a file
 Media Library → hover a card → **Delete** (top-right of the card). This removes the file and all its notes. There is no undo.
 
+## Logging in (production only)
+On the live site, `/admin` asks for the studio password. Enter it once — it remembers you for 30 days on that browser. On your own computer (`npm run dev`) there is no login.
+
 ## Current limits (will change before launch)
-- No login yet — anyone on this computer can open `/admin`. Don't deploy publicly until the password gate is added.
 - Files live on this computer (`.data/` folder). Cloud storage (R2) comes next.
 - Review links work only while the app is running on this machine.
