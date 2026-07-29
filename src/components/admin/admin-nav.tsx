@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const nav = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/media", label: "Media Library" },
+  { href: "/admin/sync-editor", label: "Multi-Angle Sync" },
 ];
 
 export function AdminNav() {

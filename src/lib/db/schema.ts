@@ -33,3 +33,27 @@ export const markers = sqliteTable("markers", {
   author: text("author"),
   createdAt: text("created_at").notNull(),
 });
+
+export const syncProjects = sqliteTable("sync_projects", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  notes: text("notes").notNull().default(""),
+  masterMediaId: text("master_media_id").references(() => media.id, {
+    onDelete: "set null",
+  }),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const syncAngles = sqliteTable("sync_angles", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => syncProjects.id, { onDelete: "cascade" }),
+  mediaId: text("media_id")
+    .notNull()
+    .references(() => media.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  offsetMs: integer("offset_ms").notNull().default(0),
+  position: integer("position").notNull().default(0),
+});

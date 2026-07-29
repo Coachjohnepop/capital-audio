@@ -4,9 +4,10 @@
 1. Open Terminal, then: `cd ~/Projects/capital-audio && npm run dev`
 2. Go to `http://localhost:3000/admin` in your browser.
 
-## The two admin pages
+## The admin pages
 - **Dashboard** (`/admin`) — file counts, storage used, recent uploads.
 - **Media Library** (`/admin/media`) — upload and manage files.
+- **Multi-Angle Sync** (`/admin/sync-editor`) — line up several cameras against one master audio track.
 
 ## Upload footage
 1. Open **Media Library**.
@@ -27,6 +28,16 @@
 2. Click **360°** (top-right of the player). This sticks — clients see it too.
 3. Drag inside the video to look around, scroll to zoom.
 4. Regular footage: leave it on **Flat**.
+
+## Multi-angle sync
+Line up several camera angles against one master audio track (the board mix).
+1. Upload the master recording and every camera's footage in **Media Library** first.
+2. Open **Multi-Angle Sync**, type a session name, click **Create project**.
+3. Pick the master audio from the dropdown — it becomes the clock everything follows.
+4. Pick each camera's file and click **+ Add angle**.
+5. Press **Play all in sync**. If a camera is early or late, click its nudge buttons (±10ms up to ±1s) until it lines up with the audio.
+6. **Audition** on an angle lets you hear that camera's own sound (master goes quiet) — match a drum hit or a clap by ear, then switch back.
+7. Click **Save offsets**. Offsets live with the project; the files themselves are never changed.
 
 ## Send footage to a client
 1. Open the file in the editor.

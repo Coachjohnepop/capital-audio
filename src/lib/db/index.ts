@@ -52,6 +52,23 @@ export function dbReady(): Promise<void> {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_markers_media ON markers(media_id);
+      CREATE TABLE IF NOT EXISTS sync_projects (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        master_media_id TEXT REFERENCES media(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS sync_angles (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES sync_projects(id) ON DELETE CASCADE,
+        media_id TEXT NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+        label TEXT NOT NULL,
+        offset_ms INTEGER NOT NULL DEFAULT 0,
+        position INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_sync_angles_project ON sync_angles(project_id);
     `);
     await importLegacyManifest();
   })();
