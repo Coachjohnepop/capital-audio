@@ -8,6 +8,7 @@
 - **Dashboard** (`/admin`) — file counts, storage used, recent uploads.
 - **Media Library** (`/admin/media`) — upload and manage files.
 - **Multi-Angle Sync** (`/admin/sync-editor`) — line up several cameras against one master audio track.
+- **Edits** (`/admin/edits`) — cut a show together on a timeline: arrange, trim, split, detach audio, markers.
 
 ## Upload footage
 1. Open **Media Library**.
@@ -38,6 +39,24 @@ Line up several camera angles against one master audio track (the board mix).
 5. Press **Play all in sync**. If a camera is early or late, click its nudge buttons (±10ms up to ±1s) until it lines up with the audio.
 6. **Audition** on an angle lets you hear that camera's own sound (master goes quiet) — match a drum hit or a clap by ear, then switch back.
 7. Click **Save offsets**. Offsets live with the project; the files themselves are never changed.
+
+## Edits (the timeline editor)
+Cut a show together, iMovie-style. Nothing here ever changes the files — a timeline is a list of pointers into the Media Library, so cut freely.
+
+1. Open **Edits**, type a title, click **Create edit**.
+2. Pick a file from the dropdown and click **+ Add to timeline**. Video lands at the end of the top track (the storyline); audio lands at the playhead on an audio track.
+3. **Play / pause** — button or spacebar. Click or drag the ruler to scrub.
+4. **Arrange** — drag a clip left or right. The storyline is magnetic: clips always butt together, everything after slides to fit.
+5. **Trim** — drag a clip's left or right edge.
+6. **Split** — park the playhead where the cut goes, press `B` (or **✂ Split**). Works on the selected clip first, otherwise whatever's under the playhead.
+7. **Delete** — select a clip, press `⌫` (or **Delete clip** in the panel below).
+8. **Detach audio** — select a video clip, click **Detach audio**. The picture mutes and its sound becomes a clip on the audio track — trim, slide, or delete each on its own. This is how you swap camera sound for the board mix: detach, delete the detached sound, add the board recording.
+9. **Markers** — press `M`. The marker sticks to the clip under the playhead (it travels when you rearrange) and is listed below the timeline — click a timestamp to jump, type to rename.
+10. **Clip panel** — with a clip selected: mute, gain, fade in/out, speed.
+11. **Undo / redo** — `⌘Z` / `⇧⌘Z`.
+12. Click **Save edit** whenever "unsaved changes" shows — like the media editor, nothing is stored until you save.
+
+Deleting a file in the Media Library removes it from any edit that uses it.
 
 ## Send footage to a client
 1. Open the file in the editor.

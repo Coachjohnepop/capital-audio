@@ -7,6 +7,7 @@ const nav = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/media", label: "Media Library" },
   { href: "/admin/sync-editor", label: "Multi-Angle Sync" },
+  { href: "/admin/edits", label: "Edits" },
 ];
 
 export function AdminNav() {

@@ -52,6 +52,59 @@ export function dbReady(): Promise<void> {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_markers_media ON markers(media_id);
+      CREATE TABLE IF NOT EXISTS edit_projects (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS edit_tracks (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES edit_projects(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        order_idx INTEGER NOT NULL DEFAULT 0,
+        muted INTEGER NOT NULL DEFAULT 0,
+        locked INTEGER NOT NULL DEFAULT 0,
+        volume REAL NOT NULL DEFAULT 1
+      );
+      CREATE INDEX IF NOT EXISTS idx_edit_tracks_project ON edit_tracks(project_id);
+      CREATE TABLE IF NOT EXISTS edit_clips (
+        id TEXT PRIMARY KEY,
+        track_id TEXT NOT NULL REFERENCES edit_tracks(id) ON DELETE CASCADE,
+        media_id TEXT NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+        start_ms INTEGER NOT NULL DEFAULT 0,
+        src_in_ms INTEGER NOT NULL DEFAULT 0,
+        src_out_ms INTEGER NOT NULL,
+        speed REAL NOT NULL DEFAULT 1,
+        muted INTEGER NOT NULL DEFAULT 0,
+        gain_db REAL NOT NULL DEFAULT 0,
+        opacity REAL NOT NULL DEFAULT 1,
+        fade_in_ms INTEGER NOT NULL DEFAULT 0,
+        fade_out_ms INTEGER NOT NULL DEFAULT 0,
+        label TEXT NOT NULL DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS idx_edit_clips_track ON edit_clips(track_id);
+      CREATE TABLE IF NOT EXISTS edit_markers (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES edit_projects(id) ON DELETE CASCADE,
+        clip_id TEXT REFERENCES edit_clips(id) ON DELETE CASCADE,
+        t_ms INTEGER NOT NULL,
+        label TEXT NOT NULL,
+        note TEXT,
+        color TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_edit_markers_project ON edit_markers(project_id);
+      CREATE TABLE IF NOT EXISTS edit_effects (
+        id TEXT PRIMARY KEY,
+        clip_id TEXT NOT NULL REFERENCES edit_clips(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        params TEXT NOT NULL DEFAULT '{}',
+        order_idx INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_edit_effects_clip ON edit_effects(clip_id);
       CREATE TABLE IF NOT EXISTS sync_projects (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
