@@ -193,71 +193,25 @@ export async function getEditProject(id: string): Promise<EditProject | null> {
 }
 
 /**
- * New projects:
- * - audio-video: iMovie-shaped V1 storyline + A1
- * - audio: magnetic A1 storyline only (multi-track arrange without picture)
+ * New projects start empty (GarageBand-style multi-track session).
+ * Each imported feed becomes its own parallel track — not an iMovie
+ * magnetic storyline. `mode` is reserved for future defaults only.
  */
 export async function createEditProject(
   title: string,
-  mode: "audio" | "audio-video" = "audio-video",
+  _mode: "audio" | "audio-video" = "audio-video",
 ): Promise<EditProject> {
   await dbReady();
   const now = new Date().toISOString();
   const id = crypto.randomBytes(8).toString("hex");
   await db.insert(projectsTable).values({
     id,
-    title: title.trim() || "Untitled edit",
+    title: title.trim() || "Untitled session",
     notes: "",
     createdAt: now,
     updatedAt: now,
   });
-  if (mode === "audio") {
-    await db.insert(tracksTable).values([
-      {
-        id: crypto.randomBytes(8).toString("hex"),
-        projectId: id,
-        kind: "audio",
-        name: "A1",
-        orderIdx: 0,
-        muted: 0,
-        locked: 0,
-        volume: 1,
-      },
-      {
-        id: crypto.randomBytes(8).toString("hex"),
-        projectId: id,
-        kind: "audio",
-        name: "A2",
-        orderIdx: 1,
-        muted: 0,
-        locked: 0,
-        volume: 1,
-      },
-    ]);
-  } else {
-    await db.insert(tracksTable).values([
-      {
-        id: crypto.randomBytes(8).toString("hex"),
-        projectId: id,
-        kind: "video",
-        name: "V1",
-        orderIdx: 0,
-        muted: 0,
-        locked: 0,
-        volume: 1,
-      },
-      {
-        id: crypto.randomBytes(8).toString("hex"),
-        projectId: id,
-        kind: "audio",
-        name: "A1",
-        orderIdx: 1,
-        muted: 0,
-        locked: 0,
-        volume: 1,
-      },
-    ]);
-  }
+  // Tracks are created as feeds are imported (each feed = one instrument lane).
   return (await getEditProject(id))!;
 }
 

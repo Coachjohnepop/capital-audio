@@ -1,18 +1,15 @@
 "use client";
 
 /**
- * Edit workbench — an iMovie-style timeline over media-library files.
+ * Studio timeline — GarageBand multi-track model, not iMovie splice.
  *
- * Model: track 0 is the MAGNETIC video storyline (clips butt together; every
- * mutation recomputes startMs so there are never gaps). Audio tracks float —
- * clips sit at an absolute startMs. Every clip is a reference into a source
- * file (srcInMs..srcOutMs at a speed); originals are never modified.
+ * Each camera / audio feed is its own parallel track (like instruments).
+ * Feeds run simultaneously; you line them up with offsets, mute camera mics,
+ * keep board mix hot, and choose which video feed is "program" (on screen).
+ * Clips are references into Media Library files — originals never change.
  *
- * Playback: a performance.now() master clock drives the playhead; a
- * corrective pass keeps one media element per clip seeked/slaved to it
- * (hard resync on big drift, playbackRate nudges on small drift — same
- * approach as the sync workbench). The next storyline clip is parked at its
- * in-point ahead of time so cuts are clean.
+ * Playback: one master clock; every feed track slaves independently.
+ * Program video is whichever feed is soloed/selected for picture.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -79,16 +76,20 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 const MIN_CLIP_MS = 50;
 
 /**
- * Keep the primary storyline magnetic: clips contiguous from t=0.
- * Track 0 is the storyline whether it's video (A+V) or audio (audio-only mode).
+ * GarageBand-style: tracks are free-floating parallel feeds.
+ * No magnetic storyline — we do not auto-collapse gaps like iMovie.
+ * (ripple kept as a no-op so call sites stay stable.)
  */
-function ripple(track: Track, trackIndex: number) {
-  if (trackIndex !== 0) return;
-  let t = 0;
-  for (const c of track.clips) {
-    c.startMs = t;
-    t += durMs(c);
-  }
+function ripple(_track: Track, _trackIndex: number) {
+  /* intentional no-op */
+}
+
+function feedLabel(kind: "video" | "audio", existing: Track[], title: string) {
+  const n =
+    existing.filter((t) => t.kind === kind).length + 1;
+  const base = title.trim() || (kind === "video" ? `Cam ${n}` : `Mix ${n}`);
+  // Prefer the file name; fall back to Cam N / Mix N
+  return base.slice(0, 40);
 }
 
 function timelineEndMs(tracks: Track[]) {
@@ -119,6 +120,10 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pxPerSec, setPxPerSec] = useState(40);
   const [addPick, setAddPick] = useState("");
+  /** Which video feed is on the monitor (GarageBand "this instrument in focus"). */
+  const [programTrackId, setProgramTrackId] = useState<string | null>(null);
+  /** Solo: when set, only that track is heard (others muted for mix). */
+  const [soloTrackId, setSoloTrackId] = useState<string | null>(null);
 
   const els = useRef<Map<string, HTMLVideoElement | HTMLAudioElement>>(new Map());
   const projectRef = useRef<Project | null>(null);
@@ -245,59 +250,78 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
     return clamp(track.volume * Math.pow(10, clip.gainDb / 20) * clamp(fade, 0, 1), 0, 1);
   };
 
-  /** Corrective pass: seat every element where the clock says it belongs. */
-  const syncElements = useCallback((cur: number, isPlaying: boolean) => {
-    const p = projectRef.current;
-    if (!p) return;
-    let nextActiveVideo: string | null = null;
-    p.tracks.forEach((track, ti) => {
-      const storyline = ti === 0;
-      // Which storyline clip is next, so we can park it at its in-point.
-      let nextClipId: string | null = null;
-      if (storyline) {
+  /**
+   * Corrective pass: every feed track slaves independently (GarageBand).
+   * Picture comes from the program feed only.
+   */
+  const syncElements = useCallback(
+    (cur: number, isPlaying: boolean) => {
+      const p = projectRef.current;
+      if (!p) return;
+      const programId =
+        programTrackId && p.tracks.some((t) => t.id === programTrackId)
+          ? programTrackId
+          : p.tracks.find((t) => t.kind === "video")?.id ?? null;
+      let nextActiveVideo: string | null = null;
+      p.tracks.forEach((track) => {
+        // Park the next region on this feed so hits are clean
+        let nextClipId: string | null = null;
         for (const c of track.clips)
           if (c.startMs > cur) {
             nextClipId = c.id;
             break;
           }
-      }
-      for (const clip of track.clips) {
-        const el = els.current.get(clip.id);
-        if (!el) continue;
-        const d = durMs(clip);
-        const active = cur >= clip.startMs && cur < clip.startMs + d;
-        const target = (clip.srcInMs + (cur - clip.startMs) * clip.speed) / 1000;
-        el.muted = clip.muted || track.muted;
-        if (!active) {
-          if (!el.paused) el.pause();
-          if (clip.id === nextClipId && Math.abs(el.currentTime - clip.srcInMs / 1000) > 0.05)
-            el.currentTime = clip.srcInMs / 1000;
-          continue;
-        }
-        if (storyline && !nextActiveVideo) nextActiveVideo = clip.id;
-        el.volume = clipVolume(clip, track, cur);
-        if (isPlaying) {
-          if (el.paused) {
-            el.currentTime = target;
-            void el.play().catch(() => {});
+        const trackSilent =
+          track.muted ||
+          (soloTrackId != null && soloTrackId !== track.id);
+        for (const clip of track.clips) {
+          const el = els.current.get(clip.id);
+          if (!el) continue;
+          const d = durMs(clip);
+          const active = cur >= clip.startMs && cur < clip.startMs + d;
+          const target =
+            (clip.srcInMs + (cur - clip.startMs) * clip.speed) / 1000;
+          el.muted = clip.muted || trackSilent;
+          if (!active) {
+            if (!el.paused) el.pause();
+            if (
+              clip.id === nextClipId &&
+              Math.abs(el.currentTime - clip.srcInMs / 1000) > 0.05
+            )
+              el.currentTime = clip.srcInMs / 1000;
+            continue;
           }
-          const drift = el.currentTime - target;
-          if (Math.abs(drift) > 0.12) {
-            el.currentTime = target;
-            el.playbackRate = clip.speed;
-          } else if (Math.abs(drift) > 0.03) {
-            el.playbackRate = clip.speed * (drift > 0 ? 0.95 : 1.05);
+          // Program feed drives the monitor
+          if (track.kind === "video" && track.id === programId && !nextActiveVideo) {
+            nextActiveVideo = clip.id;
+          }
+          el.volume = clipVolume(clip, track, cur);
+          if (isPlaying) {
+            if (el.paused) {
+              el.currentTime = target;
+              void el.play().catch(() => {});
+            }
+            const drift = el.currentTime - target;
+            if (Math.abs(drift) > 0.12) {
+              el.currentTime = target;
+              el.playbackRate = clip.speed;
+            } else if (Math.abs(drift) > 0.03) {
+              el.playbackRate = clip.speed * (drift > 0 ? 0.95 : 1.05);
+            } else {
+              el.playbackRate = clip.speed;
+            }
           } else {
-            el.playbackRate = clip.speed;
+            if (!el.paused) el.pause();
+            if (Math.abs(el.currentTime - target) > 0.03) el.currentTime = target;
           }
-        } else {
-          if (!el.paused) el.pause();
-          if (Math.abs(el.currentTime - target) > 0.03) el.currentTime = target;
         }
-      }
-    });
-    setActiveVideoId((prev) => (prev === nextActiveVideo ? prev : nextActiveVideo));
-  }, []);
+      });
+      setActiveVideoId((prev) =>
+        prev === nextActiveVideo ? prev : nextActiveVideo,
+      );
+    },
+    [programTrackId, soloTrackId],
+  );
 
   // Master clock: rAF advances the playhead, fades track smoothly; a slower
   // interval does the heavier seek/drift correction.
@@ -318,16 +342,21 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
         return;
       }
       setCurMs(cur);
-      // Cheap per-frame pass: fades + snap the cut when the active clip flips.
+      // Cheap per-frame pass: fades + snap when program feed region flips.
+      const programId =
+        programTrackId && p.tracks.some((t) => t.id === programTrackId)
+          ? programTrackId
+          : p.tracks.find((t) => t.kind === "video")?.id ?? null;
       let active: string | null = null;
-      p.tracks.forEach((track, ti) => {
+      p.tracks.forEach((track) => {
         for (const clip of track.clips) {
           const el = els.current.get(clip.id);
           if (!el) continue;
           const d = durMs(clip);
           if (cur >= clip.startMs && cur < clip.startMs + d) {
             el.volume = clipVolume(clip, track, cur);
-            if (ti === 0 && track.kind === "video" && !active) active = clip.id;
+            if (track.id === programId && track.kind === "video" && !active)
+              active = clip.id;
           }
         }
       });
@@ -413,11 +442,9 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
     });
 
   /**
-   * Place a library item on the timeline.
-   * - First video → magnetic V1 storyline
-   * - More videos → new free-floating angle tracks (V2, V3…) at the playhead
-   *   so Cam A / Cam B can sit on top of each other while you line them up
-   * - Audio → A1 at playhead (or magnetic A1 storyline in audio-only projects)
+   * GarageBand rule: every import is a new instrument/feed track.
+   * Full take as one region from t=0 (nudge later to line up).
+   * Camera mics muted by default so board mix carries the sound.
    */
   const addMediaToTimeline = async (m: MediaItem) => {
     if (!project) return;
@@ -429,77 +456,53 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
       );
       return;
     }
-    const clip: Clip = {
-      id: crypto.randomUUID(),
-      mediaId: m.id,
-      startMs: 0,
-      srcInMs: 0,
-      srcOutMs: dur,
-      speed: 1,
-      muted: false,
-      gainDb: 0,
-      opacity: 1,
-      fadeInMs: 0,
-      fadeOutMs: 0,
-      label: m.title,
-      effects: [],
-    };
-    let newClipId = clip.id;
+    const clipId = crypto.randomUUID();
+    const trackId = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+    const muteCameraMic = m.kind === "video";
     updateDoc((doc) => {
-      const storyline = doc.tracks[0];
+      const name = feedLabel(m.kind, doc.tracks, m.title);
+      const track: Track = {
+        id: trackId,
+        kind: m.kind,
+        name,
+        orderIdx: doc.tracks.length,
+        muted: false,
+        locked: false,
+        volume: 1,
+        clips: [
+          {
+            id: clipId,
+            mediaId: m.id,
+            startMs: 0,
+            srcInMs: 0,
+            srcOutMs: dur,
+            speed: 1,
+            muted: muteCameraMic,
+            gainDb: 0,
+            opacity: 1,
+            fadeInMs: 0,
+            fadeOutMs: 0,
+            label: m.title,
+            effects: [],
+          },
+        ],
+      };
+      // Videos stack above audio (mixer-style)
       if (m.kind === "video") {
-        const videoTracks = doc.tracks.filter((t) => t.kind === "video");
-        if (videoTracks.length === 0 || (videoTracks[0].clips.length === 0 && storyline?.kind === "video")) {
-          // Empty storyline — first angle fills V1
-          const v = videoTracks[0] ?? storyline;
-          if (v && v.kind === "video") {
-            v.clips.push(clip);
-            return;
-          }
-        }
-        if (videoTracks[0] && videoTracks[0].clips.length === 0) {
-          videoTracks[0].clips.push(clip);
-          return;
-        }
-        // Additional camera angles get their own free-floating track at playhead
-        const n = videoTracks.length + 1;
-        const track: Track = {
-          id: crypto.randomUUID().replace(/-/g, "").slice(0, 16),
-          kind: "video",
-          name: `V${n}`,
-          orderIdx: doc.tracks.length,
-          muted: false,
-          locked: false,
-          volume: 1,
-          clips: [],
-        };
-        clip.startMs = Math.round(curRef.current);
-        // Mute angle tracks by default so board mix (A1) carries sound
-        clip.muted = true;
-        track.clips.push(clip);
-        // Insert after existing video tracks, before audio
         const firstAudio = doc.tracks.findIndex((t) => t.kind === "audio");
         if (firstAudio >= 0) doc.tracks.splice(firstAudio, 0, track);
         else doc.tracks.push(track);
-        doc.tracks.forEach((t, i) => {
-          t.orderIdx = i;
-        });
-        return;
+      } else {
+        doc.tracks.push(track);
       }
-      // Audio
-      if (storyline?.kind === "audio") {
-        storyline.clips.push(clip);
-        return;
-      }
-      const audio =
-        doc.tracks.find((t, i) => t.kind === "audio" && i > 0) ??
-        doc.tracks.find((t) => t.kind === "audio");
-      if (!audio) return;
-      clip.startMs = Math.round(curRef.current);
-      audio.clips.push(clip);
-      audio.clips.sort((a, b) => a.startMs - b.startMs);
+      doc.tracks.forEach((t, i) => {
+        t.orderIdx = i;
+      });
     });
-    setSelectedId(newClipId);
+    setSelectedId(clipId);
+    if (m.kind === "video") {
+      setProgramTrackId((prev) => prev ?? trackId);
+    }
     setAddPick("");
   };
 
@@ -854,12 +857,16 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
         </button>
       </header>
 
-      {/* Preview — one element per clip, stacked; the active storyline clip shows. */}
+      {/* Monitor — program feed only (other video feeds still play for mix/sync) */}
       <section className="relative aspect-video w-full overflow-hidden rounded-xl border border-ca-border bg-black">
-        {allClips.map(({ clip, track, trackIdx }) => {
+        {allClips.map(({ clip, track }) => {
           const m = mediaById.get(clip.mediaId);
-          const isPictureStoryline = trackIdx === 0 && track.kind === "video";
-          if (isPictureStoryline) {
+          const isProgramVideo =
+            track.kind === "video" &&
+            (programTrackId
+              ? track.id === programTrackId
+              : track.id === project.tracks.find((t) => t.kind === "video")?.id);
+          if (track.kind === "video") {
             return (
               <video
                 key={clip.id}
@@ -871,16 +878,29 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
                 playsInline
                 preload="auto"
                 onLoadedMetadata={(e) =>
-                  durCache.current.set(clip.mediaId, Math.round(e.currentTarget.duration * 1000))
+                  durCache.current.set(
+                    clip.mediaId,
+                    Math.round(e.currentTarget.duration * 1000),
+                  )
                 }
-                className="absolute inset-0 h-full w-full object-contain"
-                style={{ visibility: activeVideoId === clip.id ? "visible" : "hidden", opacity: clip.opacity }}
+                className={
+                  isProgramVideo
+                    ? "absolute inset-0 h-full w-full object-contain"
+                    : "hidden"
+                }
+                style={
+                  isProgramVideo
+                    ? {
+                        visibility:
+                          activeVideoId === clip.id ? "visible" : "hidden",
+                        opacity: clip.opacity,
+                      }
+                    : undefined
+                }
               />
             );
           }
-          // Audio-lane clips (and audio-only storyline): audio element for audio
-          // files, hidden video for sound detached from a video file.
-          return m?.kind === "audio" || (trackIdx === 0 && track.kind === "audio") ? (
+          return m?.kind === "audio" ? (
             <audio
               key={clip.id}
               ref={(el) => {
@@ -890,7 +910,10 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
               src={fileUrl(clip.mediaId)}
               preload="auto"
               onLoadedMetadata={(e) =>
-                durCache.current.set(clip.mediaId, Math.round(e.currentTarget.duration * 1000))
+                durCache.current.set(
+                  clip.mediaId,
+                  Math.round(e.currentTarget.duration * 1000),
+                )
               }
             />
           ) : (
@@ -905,20 +928,34 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
               preload="auto"
               className="hidden"
               onLoadedMetadata={(e) =>
-                durCache.current.set(clip.mediaId, Math.round(e.currentTarget.duration * 1000))
+                durCache.current.set(
+                  clip.mediaId,
+                  Math.round(e.currentTarget.duration * 1000),
+                )
               }
             />
           );
         })}
-        {(!activeVideoId || project.tracks[0]?.kind === "audio") && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">
-            {end === 0
-              ? "Add clips below to start the timeline"
-              : project.tracks[0]?.kind === "audio"
-                ? activeVideoId
-                  ? "▶ Audio storyline playing"
-                  : "— no audio at playhead —"
-                : "— no video at playhead —"}
+        {!activeVideoId && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-6 text-center text-sm text-zinc-500">
+            {project.tracks.length === 0 ? (
+              <>
+                <p className="text-zinc-400">Empty multi-track session</p>
+                <p className="text-xs">
+                  Import each feed like an instrument — Cam A, Cam B, board mix
+                </p>
+              </>
+            ) : project.tracks.every((t) => t.kind === "audio") ? (
+              <p>▶ Multi-track audio · no video feeds</p>
+            ) : (
+              <p>— no program video at playhead —</p>
+            )}
+          </div>
+        )}
+        {programTrackId && (
+          <div className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-ca-gold">
+            Program ·{" "}
+            {project.tracks.find((t) => t.id === programTrackId)?.name ?? "—"}
           </div>
         )}
       </section>
@@ -927,9 +964,11 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/8 bg-ca-panel/60 px-4 py-3">
           <ImportMediaPair onImported={onImported} />
-          <p className="text-xs text-ca-muted sm:ml-1">
-            Import Cam A, Cam B, then board audio — extra videos land as angle
-            tracks (muted); drag edges to line up with the mix.
+          <p className="max-w-md text-xs leading-relaxed text-ca-muted sm:ml-1">
+            Each import = one feed track (like a GarageBand instrument). Camera
+            mics start muted — keep board mix hot. Drag regions to line up; set{" "}
+            <span className="text-ca-gold">Program</span> to choose which camera
+            is on the monitor.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1067,74 +1106,153 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
               ))}
           </div>
 
-          {/* Tracks */}
-          {project.tracks.map((track, ti) => (
-            <div key={track.id} className="flex border-b border-white/5">
-              <div className="flex w-24 shrink-0 items-center justify-between gap-1 border-r border-white/10 px-2 py-1">
-                <span className="text-[11px] font-semibold text-zinc-300">{track.name}</span>
-                <button
-                  onClick={() =>
-                    updateDoc((doc) => {
-                      const t = doc.tracks.find((x) => x.id === track.id);
-                      if (t) t.muted = !t.muted;
-                    })
-                  }
-                  title={track.muted ? "Unmute track" : "Mute track"}
-                  className={`text-[10px] ${track.muted ? "text-red-300" : "text-zinc-500 hover:text-white"}`}
-                >
-                  {track.muted ? "MUTED" : "mute"}
-                </button>
-              </div>
-              <div
-                ref={ti === 0 ? laneRef : undefined}
-                className={`relative ${track.kind === "video" ? "h-16" : "h-12"}`}
-                style={{ width: laneW }}
-              >
-                {track.clips.map((clip) => {
-                  const w = durMs(clip) * pxPerMs;
-                  const isSel = clip.id === selectedId;
-                  return (
-                    <div
-                      key={clip.id}
-                      onPointerDown={(e) => onClipPointerDown(e, ti, clip)}
-                      onPointerMove={onClipPointerMove}
-                      onPointerUp={onClipPointerUp}
-                      title={mediaTitle(clip.mediaId)}
-                      className={`absolute top-1 bottom-1 overflow-hidden rounded-md border px-1.5 py-0.5 ${
-                        track.kind === "video"
-                          ? "bg-white/10"
-                          : "bg-emerald-500/15"
-                      } ${isSel ? "border-ca-gold" : "border-white/15 hover:border-white/40"}`}
-                      style={{ left: clip.startMs * pxPerMs, width: Math.max(w, 6) }}
-                    >
-                      <p className="truncate text-[11px] font-semibold text-white">
-                        {clip.muted && track.kind === "video" ? "🔇 " : ""}
-                        {clip.label || mediaTitle(clip.mediaId)}
-                      </p>
-                      <p className="text-[10px] text-zinc-400">
-                        {fmtTime(durMs(clip))}
-                        {clip.speed !== 1 ? ` · ${clip.speed}×` : ""}
-                      </p>
-                      {/* Clip markers travel with the clip */}
-                      {project.markers
-                        .filter((mk) => mk.clipId === clip.id)
-                        .map((mk) => (
-                          <span
-                            key={mk.id}
-                            title={mk.label}
-                            className="absolute bottom-0.5 h-1.5 w-1.5 -translate-x-1/2 rotate-45 bg-ca-gold"
-                            style={{ left: mk.tMs * pxPerMs }}
-                          />
-                        ))}
-                      {/* Trim handles */}
-                      <span className="absolute inset-y-0 left-0 w-[10px] cursor-col-resize" />
-                      <span className="absolute inset-y-0 right-0 w-[10px] cursor-col-resize" />
-                    </div>
-                  );
-                })}
-              </div>
+          {/* Feed tracks (GarageBand-style instrument lanes) */}
+          {project.tracks.length === 0 && (
+            <div className="ml-28 py-8 text-sm text-zinc-500">
+              No feeds yet — import video and audio above.
             </div>
-          ))}
+          )}
+          {project.tracks.map((track, ti) => {
+            const isProgram =
+              track.kind === "video" &&
+              (programTrackId === track.id ||
+                (!programTrackId &&
+                  track.id ===
+                    project.tracks.find((t) => t.kind === "video")?.id));
+            const isSolo = soloTrackId === track.id;
+            return (
+              <div
+                key={track.id}
+                className={`flex border-b border-white/5 ${
+                  isProgram ? "bg-ca-gold/5" : ""
+                }`}
+              >
+                <div className="flex w-36 shrink-0 flex-col justify-center gap-1 border-r border-white/10 px-2 py-1.5">
+                  <input
+                    value={track.name}
+                    onChange={(e) =>
+                      updateDoc(
+                        (doc) => {
+                          const t = doc.tracks.find((x) => x.id === track.id);
+                          if (t) t.name = e.target.value.slice(0, 40);
+                        },
+                        { coalesce: `rename-${track.id}` },
+                      )
+                    }
+                    className="w-full truncate bg-transparent text-[11px] font-semibold text-zinc-200 outline-none focus:text-white"
+                    title="Feed name"
+                  />
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateDoc((doc) => {
+                          const t = doc.tracks.find((x) => x.id === track.id);
+                          if (t) t.muted = !t.muted;
+                        })
+                      }
+                      title="Mute feed"
+                      className={`rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${
+                        track.muted
+                          ? "bg-red-500/20 text-red-300"
+                          : "bg-white/5 text-zinc-500 hover:text-white"
+                      }`}
+                    >
+                      M
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSoloTrackId((s) =>
+                          s === track.id ? null : track.id,
+                        )
+                      }
+                      title="Solo feed"
+                      className={`rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${
+                        isSolo
+                          ? "bg-amber-500/25 text-amber-200"
+                          : "bg-white/5 text-zinc-500 hover:text-white"
+                      }`}
+                    >
+                      S
+                    </button>
+                    {track.kind === "video" && (
+                      <button
+                        type="button"
+                        onClick={() => setProgramTrackId(track.id)}
+                        title="Program — show this camera on the monitor"
+                        className={`rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${
+                          isProgram
+                            ? "bg-ca-gold/25 text-ca-gold"
+                            : "bg-white/5 text-zinc-500 hover:text-white"
+                        }`}
+                      >
+                        P
+                      </button>
+                    )}
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-600">
+                      {track.kind === "video" ? "cam" : "audio"}
+                    </span>
+                  </div>
+                </div>
+                <div
+                  ref={ti === 0 ? laneRef : undefined}
+                  className={`relative ${track.kind === "video" ? "h-14" : "h-12"}`}
+                  style={{ width: laneW }}
+                >
+                  {track.clips.map((clip) => {
+                    const w = durMs(clip) * pxPerMs;
+                    const isSel = clip.id === selectedId;
+                    return (
+                      <div
+                        key={clip.id}
+                        onPointerDown={(e) => onClipPointerDown(e, ti, clip)}
+                        onPointerMove={onClipPointerMove}
+                        onPointerUp={onClipPointerUp}
+                        title={mediaTitle(clip.mediaId)}
+                        className={`absolute top-1 bottom-1 overflow-hidden rounded-md border px-1.5 py-0.5 ${
+                          track.kind === "video"
+                            ? "bg-sky-500/15"
+                            : "bg-emerald-500/15"
+                        } ${
+                          isSel
+                            ? "border-ca-gold"
+                            : "border-white/15 hover:border-white/40"
+                        }`}
+                        style={{
+                          left: clip.startMs * pxPerMs,
+                          width: Math.max(w, 6),
+                        }}
+                      >
+                        <p className="truncate text-[11px] font-semibold text-white">
+                          {clip.muted ? "🔇 " : ""}
+                          {clip.label || mediaTitle(clip.mediaId)}
+                        </p>
+                        <p className="text-[10px] text-zinc-400">
+                          {fmtTime(durMs(clip))}
+                          {clip.startMs !== 0
+                            ? ` · offset ${fmtTime(clip.startMs)}`
+                            : ""}
+                        </p>
+                        {project.markers
+                          .filter((mk) => mk.clipId === clip.id)
+                          .map((mk) => (
+                            <span
+                              key={mk.id}
+                              title={mk.label}
+                              className="absolute bottom-0.5 h-1.5 w-1.5 -translate-x-1/2 rotate-45 bg-ca-gold"
+                              style={{ left: mk.tMs * pxPerMs }}
+                            />
+                          ))}
+                        <span className="absolute inset-y-0 left-0 w-[10px] cursor-col-resize" />
+                        <span className="absolute inset-y-0 right-0 w-[10px] cursor-col-resize" />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
 
           {/* Playhead */}
           <div
@@ -1144,29 +1262,14 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
             <div className="-ml-[5px] h-0 w-0 border-x-[5px] border-t-[6px] border-x-transparent border-t-[#d3a94f]" />
           </div>
         </div>
-        <div className="flex items-center justify-between px-3 py-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5">
           <p className="text-[11px] text-zinc-500">
-            drag = arrange · edges = trim · B split · M marker · ⌫ delete · space play · ⌘Z undo
+            M mute · S solo · P program camera · drag = offset/sync · edges =
+            trim · B split · space play · ⌘Z undo
           </p>
-          <button
-            onClick={() =>
-              updateDoc((doc) => {
-                doc.tracks.push({
-                  id: crypto.randomUUID(),
-                  kind: "audio",
-                  name: `A${doc.tracks.filter((t) => t.kind === "audio").length + 1}`,
-                  orderIdx: doc.tracks.length,
-                  muted: false,
-                  locked: false,
-                  volume: 1,
-                  clips: [],
-                });
-              })
-            }
-            className="text-[11px] text-zinc-400 hover:text-ca-gold"
-          >
-            + audio track
-          </button>
+          <span className="text-[11px] text-zinc-600">
+            Feeds are parallel — not an iMovie storyline
+          </span>
         </div>
       </section>
 

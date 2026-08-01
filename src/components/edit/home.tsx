@@ -67,8 +67,8 @@ export function EditsHome() {
         </h1>
         <p className="mt-2 max-w-xl text-sm text-ca-muted">
           {videoOn
-            ? "Import Cam A, Cam B, and board audio into a timeline, line them up, then cut. Clips reference the Media Library — originals are never touched."
-            : "Import multi-track audio, line stems up, then cut. New projects start with audio lanes only (studio is in audio-only mode)."}
+            ? "Multi-track like GarageBand: each camera and the board mix is its own feed. Import them, line them up, pick program camera — not an iMovie splice storyline."
+            : "Multi-track like GarageBand: each stem is its own feed. Import, line up, mute/solo — not a single spliced sequence."}
         </p>
       </header>
 

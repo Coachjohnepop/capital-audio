@@ -64,8 +64,8 @@ export function MediaLibrary() {
           <p className="text-sm font-medium text-white">Import media</p>
           <p className="mt-1 text-xs leading-relaxed text-ca-muted">
             {videoOn
-              ? "Bring in Cam A, Cam B, and board audio as separate files — then open Multi-angle sync to line them up, or Timeline to cut."
-              : "Bring in multi-track bounces and stems, then open Timeline to arrange."}
+              ? "Each file is a feed — Cam A, Cam B, board mix — like instruments in GarageBand. Open Timeline to stack them in parallel and line them up."
+              : "Each file is a feed/stem — import, then open Timeline to stack them in parallel."}
           </p>
         </div>
         <ImportMediaPair onBatchDone={() => refresh()} />
@@ -115,15 +115,16 @@ export function MediaLibrary() {
       {videoOn && (
         <div className="rounded-xl border border-ca-gold/20 bg-ca-gold/5 px-4 py-3 text-sm text-zinc-300">
           <span className="font-medium text-ca-gold">Two angles + board mix?</span>{" "}
-          Import all three separately →{" "}
-          <Link href="/admin/sync-editor" className="text-ca-gold underline">
-            Multi-angle sync
-          </Link>{" "}
-          to line them up →{" "}
+          Import all three → open{" "}
           <Link href="/admin/edits" className="text-ca-gold underline">
             Timeline
           </Link>{" "}
-          to cut.
+          (each feed = one parallel track). Drag to sync, set Program camera. Or
+          use{" "}
+          <Link href="/admin/sync-editor" className="text-ca-gold underline">
+            Multi-angle sync
+          </Link>{" "}
+          for offset nudges only.
         </div>
       )}
 
