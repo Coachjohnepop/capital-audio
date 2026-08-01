@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
+import { CapabilityProvider } from "@/components/capability-provider";
 import { site } from "@/lib/site";
 import "./globals.css";
 
@@ -21,7 +22,7 @@ const display = Playfair_Display({
 
 export const metadata: Metadata = {
   title: {
-    default: `${site.name} | Live Music Video & Audio Capture`,
+    default: `${site.name} | Live Audio & Video Capture`,
     template: `%s | ${site.name}`,
   },
   description: site.description,
@@ -38,7 +39,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${display.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-ca-ink text-foreground">
-        {children}
+        <CapabilityProvider>{children}</CapabilityProvider>
       </body>
     </html>
   );

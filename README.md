@@ -1,20 +1,49 @@
 # Capital Audio
 
-Professional **live music video & multi-track audio** capture — booking website and order flow. Production gear coordinated via [ShareGrid](https://www.sharegrid.com).
+Professional **multi-track audio** and **multi-cam video** for live performances — marketing site, booking, client portal, and studio tools. Production gear coordinated via [ShareGrid](https://www.sharegrid.com).
 
 Repo: [Coachjohnepop/capital-audio](https://github.com/Coachjohnepop/capital-audio)
 
-## Client demo pages
+## Two use cases, one product
 
+| Mode | What it unlocks |
+|------|-----------------|
+| **Audio only** | Multi-track capture packages, audio upload, review links, audio timelines. Video tools hidden. |
+| **Audio + Video** | Everything in audio, plus multi-cam packages, 360° review, multi-angle sync, picture edits. |
+
+There is **no video-only mode** — video work always includes audio.
+
+Toggle mode in **Studio Admin → Settings** (or the compact control in the admin nav). Preference is stored in the browser (`ca-capability-mode`).
+
+## Routes
+
+### Public site
 | Route | Purpose |
 |-------|---------|
-| `/` | Marketing landing — hero, services, packages, process, ShareGrid, testimonials |
-| `/packages` | Full package details & pricing |
+| `/` | Marketing landing |
+| `/packages` | Audio-only and A+V packages |
 | `/gear` | Sample ShareGrid kit catalog |
-| `/book` | Multi-step booking / order request |
+| `/book` | Multi-step booking request |
 | `/about` | Company story & contact |
 
-Bookings are stored in browser `localStorage` (`ca-bookings`) for demo — swap for an API/email later.
+### Client portal
+| Route | Purpose |
+|-------|---------|
+| `/portal/login` | Demo sign-in |
+| `/portal` | Project overview |
+| `/portal/projects` | Capture projects & milestones |
+| `/portal/bookings` | Booking requests (`localStorage`) |
+| `/portal/account` | Demo profile |
+
+### Studio admin
+| Route | Purpose |
+|-------|---------|
+| `/admin` | Dashboard + mode toggle |
+| `/admin/media` | Upload / trim / markers / review links |
+| `/admin/sync-editor` | Multi-angle sync (**A+V mode only**) |
+| `/admin/edits` | Timeline edits (audio-only projects get A1/A2) |
+| `/admin/settings` | Studio mode explanation |
+| `/review/[id]` | Client review player |
 
 ## Local development
 
@@ -32,20 +61,22 @@ Open [http://localhost:3000](http://localhost:3000).
 - React 19
 - Tailwind CSS 4
 - TypeScript
+- Drizzle + SQLite (local) / Turso (prod path)
 
 ## Deploy (Vercel)
 
 1. Import `Coachjohnepop/capital-audio` in Vercel  
-2. Deploy from `main`  
-3. Share the production URL with the client  
+2. Set `ADMIN_PASSWORD` for production admin gate  
+3. Deploy from `main`
 
-## Customize for the client
+## Customize
 
 - Contact & copy: `src/lib/site.ts`
-- Packages / gear list: same file
+- Packages / gear: same file (`mode: "audio" | "audio-video"`)
+- Portal demo data: `src/lib/portal.ts`
 - Brand colors: `src/app/globals.css` (gold on near-black)
 
-Placeholder phone/email are demo values — update before client handoff.
+Bookings: `localStorage` key `ca-bookings`. Portal login is a demo gate.
 
 ---
 

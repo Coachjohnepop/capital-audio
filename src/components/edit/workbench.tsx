@@ -77,9 +77,12 @@ const durMs = (c: Pick<Clip, "srcInMs" | "srcOutMs" | "speed">) =>
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const MIN_CLIP_MS = 50;
 
-/** Keep the storyline magnetic: clips contiguous from t=0, in array order. */
-function ripple(track: Track) {
-  if (track.kind !== "video") return;
+/**
+ * Keep the primary storyline magnetic: clips contiguous from t=0.
+ * Track 0 is the storyline whether it's video (A+V) or audio (audio-only mode).
+ */
+function ripple(track: Track, trackIndex: number) {
+  if (trackIndex !== 0) return;
   let t = 0;
   for (const c of track.clips) {
     c.startMs = t;
@@ -208,7 +211,7 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
     lastOp.current = { tag: opts?.coalesce ?? "", at: now };
     const doc = snapshot(p);
     fn(doc);
-    for (const t of doc.tracks) ripple(t);
+    doc.tracks.forEach((t, i) => ripple(t, i));
     setProject({ ...p, tracks: doc.tracks, markers: doc.markers });
     setDirty(true);
   };
@@ -247,7 +250,7 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
     if (!p) return;
     let nextActiveVideo: string | null = null;
     p.tracks.forEach((track, ti) => {
-      const storyline = ti === 0 && track.kind === "video";
+      const storyline = ti === 0;
       // Which storyline clip is next, so we can park it at its in-point.
       let nextClipId: string | null = null;
       if (storyline) {
@@ -433,15 +436,26 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
       effects: [],
     };
     updateDoc((doc) => {
+      const storyline = doc.tracks[0];
+      // Video always goes on the picture storyline when present.
       if (m.kind === "video") {
-        doc.tracks[0]?.clips.push(clip); // storyline appends; ripple placed it
-      } else {
-        const audio = doc.tracks.find((t) => t.kind === "audio");
-        if (!audio) return;
-        clip.startMs = Math.round(curRef.current);
-        audio.clips.push(clip);
-        audio.clips.sort((a, b) => a.startMs - b.startMs);
+        const vTrack = doc.tracks.find((t) => t.kind === "video") ?? storyline;
+        vTrack?.clips.push(clip);
+        return;
       }
+      // Audio: append to storyline when it's an audio-only project (A1 magnetic),
+      // otherwise place at playhead on the first free-floating audio lane.
+      if (storyline?.kind === "audio") {
+        storyline.clips.push(clip);
+        return;
+      }
+      const audio =
+        doc.tracks.find((t, i) => t.kind === "audio" && i > 0) ??
+        doc.tracks.find((t) => t.kind === "audio");
+      if (!audio) return;
+      clip.startMs = Math.round(curRef.current);
+      audio.clips.push(clip);
+      audio.clips.sort((a, b) => a.startMs - b.startMs);
     });
     setSelectedId(clip.id);
     setAddPick("");
@@ -647,7 +661,7 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
           track.clips = [...others.slice(0, insert), c, ...others.slice(insert)];
         }
       }
-      for (const t of doc.tracks) ripple(t);
+      doc.tracks.forEach((t, i) => ripple(t, i));
       setProject({ ...p, tracks: doc.tracks, markers: doc.markers });
       setDirty(true);
     }
@@ -784,12 +798,12 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
         </button>
       </header>
 
-      {/* Preview — one element per clip, stacked; the active one shows. */}
+      {/* Preview — one element per clip, stacked; the active storyline clip shows. */}
       <section className="relative aspect-video w-full overflow-hidden rounded-xl border border-ca-border bg-black">
         {allClips.map(({ clip, track, trackIdx }) => {
           const m = mediaById.get(clip.mediaId);
-          const isStoryline = trackIdx === 0 && track.kind === "video";
-          if (isStoryline) {
+          const isPictureStoryline = trackIdx === 0 && track.kind === "video";
+          if (isPictureStoryline) {
             return (
               <video
                 key={clip.id}
@@ -808,9 +822,9 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
               />
             );
           }
-          // Audio-lane clips: audio element for audio files, hidden video for
-          // sound detached from a video file.
-          return m?.kind === "audio" ? (
+          // Audio-lane clips (and audio-only storyline): audio element for audio
+          // files, hidden video for sound detached from a video file.
+          return m?.kind === "audio" || (trackIdx === 0 && track.kind === "audio") ? (
             <audio
               key={clip.id}
               ref={(el) => {
@@ -840,9 +854,15 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
             />
           );
         })}
-        {!activeVideoId && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-600">
-            {end === 0 ? "Add clips below to start the timeline" : "— no video at playhead —"}
+        {(!activeVideoId || project.tracks[0]?.kind === "audio") && (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">
+            {end === 0
+              ? "Add clips below to start the timeline"
+              : project.tracks[0]?.kind === "audio"
+                ? activeVideoId
+                  ? "▶ Audio storyline playing"
+                  : "— no audio at playhead —"
+                : "— no video at playhead —"}
           </div>
         )}
       </section>

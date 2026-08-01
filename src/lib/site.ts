@@ -1,8 +1,12 @@
+import type { CapabilityMode } from "./capability";
+
 export const site = {
   name: "Capital Audio",
+  /** Used when video mode is on in client chrome. */
+  nameWithVideo: "Capital Audio & Video",
   tagline: "Live music, captured properly",
   description:
-    "Professional multi-cam video and multi-track audio for live performances — booked in minutes, powered by pro gear from ShareGrid.",
+    "Professional multi-track audio and multi-cam video for live performances — book a shoot, track delivery in your portal, and review masters with the studio.",
   email: "book@capitalaudio.co",
   phone: "(202) 555-0148",
   phoneTel: "+12025550148",
@@ -10,7 +14,12 @@ export const site = {
   sharegridUrl: "https://www.sharegrid.com",
 } as const;
 
-export type PackageId = "single-cam" | "stage-ready" | "festival";
+export type PackageId =
+  | "board-mix"
+  | "multi-track"
+  | "single-cam"
+  | "stage-ready"
+  | "festival";
 
 export interface CapturePackage {
   id: PackageId;
@@ -18,6 +27,8 @@ export interface CapturePackage {
   tagline: string;
   priceFrom: number;
   popular?: boolean;
+  /** What capability this package requires. Audio packages work in either mode. */
+  mode: CapabilityMode;
   includes: string[];
   idealFor: string;
   turnaround: string;
@@ -25,10 +36,44 @@ export interface CapturePackage {
 
 export const packages: CapturePackage[] = [
   {
+    id: "board-mix",
+    name: "Board Mix",
+    tagline: "Clean stereo program + ambient",
+    priceFrom: 390,
+    mode: "audio",
+    includes: [
+      "Stereo board feed + audience ambient",
+      "Up to 90 minutes of performance",
+      "Safety bounce + stems package",
+      "Client review link for notes",
+      "Full show master files",
+    ],
+    idealFor: "Podcasts-on-stage, songwriter nights, quick social audio",
+    turnaround: "3–5 business days",
+  },
+  {
+    id: "multi-track",
+    name: "Multi-Track Audio",
+    tagline: "Board stems you can actually mix",
+    priceFrom: 790,
+    popular: true,
+    mode: "audio",
+    includes: [
+      "Multi-track board feed + room mics",
+      "32-bit float safety recorder",
+      "Up to 2 hours performance time",
+      "Labeled session for your engineer",
+      "Review portal + timestamp notes",
+    ],
+    idealFor: "Live EPs, church services, album-worthy club sets",
+    turnaround: "5–7 business days",
+  },
+  {
     id: "single-cam",
     name: "Stage Single",
     tagline: "One operator, cinematic coverage",
     priceFrom: 890,
+    mode: "audio-video",
     includes: [
       "1 cinema camera + prime lens kit",
       "Stereo program mix + audience ambient",
@@ -45,6 +90,7 @@ export const packages: CapturePackage[] = [
     tagline: "Multi-cam + multi-track audio",
     priceFrom: 1890,
     popular: true,
+    mode: "audio-video",
     includes: [
       "3-camera multi-cam switch + ISO recordings",
       "Multi-track board feed + room mics",
@@ -60,6 +106,7 @@ export const packages: CapturePackage[] = [
     name: "Festival / Tour Stop",
     tagline: "Crew, redundancy, broadcast-ready",
     priceFrom: 4200,
+    mode: "audio-video",
     includes: [
       "4+ camera package with director",
       "Dedicated audio engineer on multi-track",
@@ -72,6 +119,12 @@ export const packages: CapturePackage[] = [
   },
 ];
 
+/** Packages visible for a studio mode. Audio packages always show; video packages only when video is on. */
+export function packagesForMode(mode: CapabilityMode): CapturePackage[] {
+  if (mode === "audio-video") return packages;
+  return packages.filter((p) => p.mode === "audio");
+}
+
 export interface GearItem {
   id: string;
   name: string;
@@ -79,6 +132,8 @@ export interface GearItem {
   dayRate: number;
   note: string;
   sharegrid: boolean;
+  /** Camera / lens / lighting need video mode; audio always available. */
+  requiresVideo?: boolean;
 }
 
 /** Representative kit list — sourced via ShareGrid for client shoots */
@@ -90,6 +145,7 @@ export const gearCatalog: GearItem[] = [
     dayRate: 175,
     note: "Full-frame 4K, dual ISO — A-cam workhorse",
     sharegrid: true,
+    requiresVideo: true,
   },
   {
     id: "c70",
@@ -98,6 +154,7 @@ export const gearCatalog: GearItem[] = [
     dayRate: 145,
     note: "Compact RF-mount cinema body",
     sharegrid: true,
+    requiresVideo: true,
   },
   {
     id: "24-70",
@@ -106,6 +163,7 @@ export const gearCatalog: GearItem[] = [
     dayRate: 55,
     note: "Stage-wide to tight performance coverage",
     sharegrid: true,
+    requiresVideo: true,
   },
   {
     id: "70-200",
@@ -114,6 +172,7 @@ export const gearCatalog: GearItem[] = [
     dayRate: 50,
     note: "Tight face / instrument detail from FOH",
     sharegrid: true,
+    requiresVideo: true,
   },
   {
     id: "zoom-f6",
@@ -146,6 +205,7 @@ export const gearCatalog: GearItem[] = [
     dayRate: 55,
     note: "Accent / interview key when venue lights fail",
     sharegrid: true,
+    requiresVideo: true,
   },
   {
     id: "tripod",
@@ -154,6 +214,7 @@ export const gearCatalog: GearItem[] = [
     dayRate: 30,
     note: "Smooth pans for long sets",
     sharegrid: true,
+    requiresVideo: true,
   },
   {
     id: "gimbal",
@@ -162,52 +223,67 @@ export const gearCatalog: GearItem[] = [
     dayRate: 40,
     note: "Walking shots through the crowd",
     sharegrid: true,
+    requiresVideo: true,
   },
 ];
 
+export function gearForMode(mode: CapabilityMode): GearItem[] {
+  if (mode === "audio-video") return gearCatalog;
+  return gearCatalog.filter((g) => !g.requiresVideo);
+}
+
 export const services = [
-  {
-    title: "Multi-cam live video",
-    body: "Stage, FOH, and detail angles cut into a show that feels like being there — and looking better than phone videos ever will.",
-    icon: "video" as const,
-  },
   {
     title: "Multi-track audio",
     body: "Board feeds, room mics, and safety tracks so the mix can be finished properly — not a single stereo board dump.",
     icon: "audio" as const,
+    mode: "audio" as CapabilityMode,
+  },
+  {
+    title: "Multi-cam live video",
+    body: "Stage, FOH, and detail angles cut into a show that feels like being there — always paired with usable audio.",
+    icon: "video" as const,
+    mode: "audio-video" as CapabilityMode,
   },
   {
     title: "ShareGrid pro gear",
-    body: "We pull cinema cameras, glass, and audio from ShareGrid so every shoot has the right kit without bloating your budget.",
+    body: "We pull recorders, cinema cameras, and glass from ShareGrid so every shoot has the right kit without bloating your budget.",
     icon: "gear" as const,
+    mode: "audio" as CapabilityMode,
   },
   {
-    title: "Deliverables that ship",
-    body: "Full masters, highlight reels, vertical social cuts, and rights clear enough for labels, venues, and artist pages.",
+    title: "Portal delivery",
+    body: "Bookings, milestones, review links, and masters in one client portal — notes at timestamps, not endless email threads.",
     icon: "deliver" as const,
+    mode: "audio" as CapabilityMode,
   },
 ];
+
+export function servicesForMode(mode: CapabilityMode) {
+  if (mode === "audio-video") return services;
+  return services.filter((s) => s.mode === "audio");
+}
 
 export const processSteps = [
   {
     n: "01",
     title: "Book the date",
-    body: "Pick a package, tell us the venue and set length. We confirm crew availability within one business day.",
+    body: "Pick audio-only or audio + video, tell us the venue and set length. We confirm within one business day.",
   },
   {
     n: "02",
     title: "We lock the kit",
-    body: "Cameras, glass, and recorders are reserved on ShareGrid for your show — insured and ready.",
+    body: "Recorders (and cameras when you need them) are reserved on ShareGrid — insured and ready.",
   },
   {
     n: "03",
     title: "Capture night",
-    body: "Our team arrives early, lines with FOH, and runs a clean multi-cam + multi-track capture.",
+    body: "Our team arrives early, lines with FOH, and runs a clean multi-track capture — multi-cam when booked.",
   },
   {
     n: "04",
     title: "Edit & deliver",
-    body: "Color, mix, and masters land in your portal — plus social-ready clips for the morning after if you need them.",
+    body: "Masters land in your portal with review links for notes — plus social-ready cuts when video is on.",
   },
 ];
 
@@ -238,4 +314,8 @@ export function formatMoney(n: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(n);
+}
+
+export function displayName(mode: CapabilityMode) {
+  return mode === "audio-video" ? site.nameWithVideo : site.name;
 }

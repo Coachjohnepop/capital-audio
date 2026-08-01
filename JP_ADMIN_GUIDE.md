@@ -4,11 +4,20 @@
 1. Open Terminal, then: `cd ~/Projects/capital-audio && npm run dev`
 2. Go to `http://localhost:3000/admin` in your browser.
 
+## Studio mode (Audio only vs Audio + Video)
+Top-right of the admin bar (or **Settings**):
+- **Audio only** — multi-track audio upload, review links, audio timelines. Multi-angle sync and 360° tools stay hidden.
+- **Audio + Video** — everything above, plus multi-cam packages, picture edits, multi-angle sync, and 360° review.
+
+You never run video without audio. The toggle is saved in this browser until we add a server account setting.
+
 ## The admin pages
-- **Dashboard** (`/admin`) — file counts, storage used, recent uploads.
-- **Media Library** (`/admin/media`) — upload and manage files.
-- **Multi-Angle Sync** (`/admin/sync-editor`) — line up several cameras against one master audio track.
-- **Edits** (`/admin/edits`) — cut a show together on a timeline: arrange, trim, split, detach audio, markers.
+- **Dashboard** (`/admin`) — file counts, storage used, recent uploads, mode toggle.
+- **Media Library** (`/admin/media`) — upload and manage files (audio-only accept when mode is Audio only).
+- **Multi-Angle Sync** (`/admin/sync-editor`) — line up several cameras against one master audio track (**Audio + Video mode only**).
+- **Edits** (`/admin/edits`) — cut a show together on a timeline: arrange, trim, split, detach audio, markers. New audio-only edits start with A1/A2 tracks.
+- **Settings** (`/admin/settings`) — explain studio modes.
+- **Client portal** (`/portal`) — what customers see for projects, bookings, and milestones.
 
 ## Upload footage
 1. Open **Media Library**.

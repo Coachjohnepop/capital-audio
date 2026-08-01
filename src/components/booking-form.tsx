@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { IconArrow, IconCheck } from "@/components/icons";
+import { ModeBadge } from "@/components/ui/mode-badge";
+import { BOOKINGS_STORAGE_KEY } from "@/lib/portal";
 import { formatMoney, packages, type PackageId, site } from "@/lib/site";
 
 type Form = {
@@ -75,7 +77,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
     if (!validate()) return;
     const id = `CA-${Date.now().toString().slice(-6)}`;
     try {
-      const prev = JSON.parse(localStorage.getItem("ca-bookings") || "[]");
+      const prev = JSON.parse(localStorage.getItem(BOOKINGS_STORAGE_KEY) || "[]");
       prev.unshift({
         id,
         createdAt: new Date().toISOString(),
@@ -83,8 +85,9 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
         ...form,
         packageName: selected?.name,
         priceFrom: selected?.priceFrom,
+        mode: selected?.mode,
       });
-      localStorage.setItem("ca-bookings", JSON.stringify(prev));
+      localStorage.setItem(BOOKINGS_STORAGE_KEY, JSON.stringify(prev));
     } catch {
       /* demo */
     }
@@ -93,14 +96,14 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
 
   if (orderId) {
     return (
-      <div className="rounded-2xl border border-ca-gold/30 bg-ca-panel p-8 sm:p-10 text-center">
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-ca-gold/15 text-ca-gold">
+      <div className="ca-card ca-card-featured p-8 text-center sm:p-10">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-ca-gold/15 text-ca-gold ring-1 ring-ca-gold/30">
           <IconCheck className="h-7 w-7" />
         </div>
         <h2 className="font-display text-2xl font-semibold text-white">
           Request received
         </h2>
-        <p className="mx-auto mt-3 max-w-md text-ca-muted leading-relaxed">
+        <p className="mx-auto mt-3 max-w-md leading-relaxed text-ca-muted">
           Order{" "}
           <span className="font-mono text-ca-gold">{orderId}</span> is in our
           queue. We&apos;ll confirm crew and ShareGrid kit within one business
@@ -112,16 +115,16 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
             {form.eventDate || "date TBD"}
           </p>
         )}
-        <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-          <Link
-            href="/"
-            className="rounded-full bg-ca-gold px-6 py-3 text-sm font-semibold text-ca-ink hover:bg-ca-gold-light"
-          >
+        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <Link href="/portal/bookings" className="ca-btn ca-btn-primary">
+            Open client portal
+          </Link>
+          <Link href="/" className="ca-btn ca-btn-secondary">
             Back to home
           </Link>
           <a
             href={`mailto:${site.email}?subject=Booking%20${orderId}`}
-            className="rounded-full border border-white/15 px-6 py-3 text-sm text-white hover:bg-white/5"
+            className="ca-btn ca-btn-secondary"
           >
             Email us
           </a>
@@ -130,30 +133,32 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
     );
   }
 
-  const field =
-    "mt-2 w-full rounded-xl border border-white/10 bg-ca-ink px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-ca-gold/50 focus:ring-1 focus:ring-ca-gold/30";
-
   return (
-    <div className="rounded-2xl border border-white/10 bg-ca-panel p-5 sm:p-8">
+    <div className="ca-card p-5 sm:p-8">
       <ol className="flex flex-wrap gap-2 sm:gap-3">
         {steps.map((label, i) => (
           <li key={label} className="flex items-center gap-2">
             <span
-              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
+              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-colors ${
                 i < step
                   ? "bg-ca-gold text-ca-ink"
                   : i === step
-                    ? "bg-white text-ca-ink"
+                    ? "bg-white text-ca-ink ring-2 ring-white/20"
                     : "bg-white/10 text-zinc-500"
               }`}
             >
               {i < step ? <IconCheck className="h-4 w-4" /> : i + 1}
             </span>
             <span
-              className={`hidden text-sm sm:inline ${i === step ? "text-white" : "text-zinc-500"}`}
+              className={`hidden text-sm sm:inline ${
+                i === step ? "font-medium text-white" : "text-zinc-500"
+              }`}
             >
               {label}
             </span>
+            {i < steps.length - 1 && (
+              <span className="mx-1 hidden h-px w-4 bg-white/10 sm:block" aria-hidden />
+            )}
           </li>
         ))}
       </ol>
@@ -175,7 +180,8 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
               Choose a package
             </h2>
             <p className="mt-1 text-sm text-ca-muted">
-              You can refine details after we confirm availability.
+              Audio-only or audio + video — never video without audio. Refine
+              details after we confirm availability.
             </p>
             <div className="mt-6 grid gap-3">
               {packages.map((p) => {
@@ -188,7 +194,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
                     className={`rounded-xl border p-5 text-left transition-all ${
                       on
                         ? "border-ca-gold/50 bg-ca-gold/10 ring-1 ring-ca-gold/40"
-                        : "border-white/10 hover:border-white/20 bg-ca-ink/40"
+                        : "border-white/10 bg-ca-ink/40 hover:border-white/20"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -202,6 +208,9 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
                           )}
                         </p>
                         <p className="mt-1 text-sm text-ca-muted">{p.tagline}</p>
+                        <div className="mt-2">
+                          <ModeBadge mode={p.mode} />
+                        </div>
                       </div>
                       <p className="shrink-0 text-sm font-semibold text-ca-gold">
                         from {formatMoney(p.priceFrom)}
@@ -222,7 +231,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
             <label className="block">
               <span className="text-sm text-white">Artist / event name *</span>
               <input
-                className={field}
+                className="ca-field"
                 value={form.artistOrEvent}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, artistOrEvent: e.target.value }))
@@ -235,7 +244,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
                 <span className="text-sm text-white">Event date *</span>
                 <input
                   type="date"
-                  className={field}
+                  className="ca-field"
                   value={form.eventDate}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, eventDate: e.target.value }))
@@ -245,7 +254,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
               <label className="block">
                 <span className="text-sm text-white">Set length</span>
                 <select
-                  className={field}
+                  className="ca-field"
                   value={form.setLength}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, setLength: e.target.value }))
@@ -263,7 +272,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
               <label className="block">
                 <span className="text-sm text-white">Venue *</span>
                 <input
-                  className={field}
+                  className="ca-field"
                   value={form.venue}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, venue: e.target.value }))
@@ -274,7 +283,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
               <label className="block">
                 <span className="text-sm text-white">City</span>
                 <input
-                  className={field}
+                  className="ca-field"
                   value={form.city}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, city: e.target.value }))
@@ -287,7 +296,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
               <span className="text-sm text-white">Notes for the crew</span>
               <textarea
                 rows={3}
-                className={field}
+                className="ca-field"
                 value={form.notes}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, notes: e.target.value }))
@@ -306,7 +315,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
             <label className="block">
               <span className="text-sm text-white">Full name *</span>
               <input
-                className={field}
+                className="ca-field"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               />
@@ -316,7 +325,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
                 <span className="text-sm text-white">Email *</span>
                 <input
                   type="email"
-                  className={field}
+                  className="ca-field"
                   value={form.email}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, email: e.target.value }))
@@ -327,7 +336,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
                 <span className="text-sm text-white">Phone *</span>
                 <input
                   type="tel"
-                  className={field}
+                  className="ca-field"
                   value={form.phone}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, phone: e.target.value }))
@@ -338,7 +347,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
             <label className="block">
               <span className="text-sm text-white">Label / venue / company</span>
               <input
-                className={field}
+                className="ca-field"
                 value={form.company}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, company: e.target.value }))
@@ -363,6 +372,15 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
                 <dd className="sm:col-span-2 text-white">
                   {selected?.name} · from{" "}
                   {selected ? formatMoney(selected.priceFrom) : "—"}
+                  {selected && (
+                    <span className="ml-2 text-xs text-zinc-500">
+                      (
+                      {selected.mode === "audio"
+                        ? "Audio only"
+                        : "Audio + Video"}
+                      )
+                    </span>
+                  )}
                 </dd>
               </div>
               <div className="grid gap-1 px-4 py-3 sm:grid-cols-3">
@@ -397,7 +415,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
         )}
       </div>
 
-      <div className="mt-8 flex justify-between border-t border-white/10 pt-6">
+      <div className="mt-8 flex justify-between border-t border-white/8 pt-6">
         <button
           type="button"
           disabled={step === 0}
@@ -405,24 +423,16 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
             setErrors([]);
             setStep((s) => Math.max(0, s - 1));
           }}
-          className="text-sm text-ca-muted hover:text-white disabled:opacity-30"
+          className="ca-btn ca-btn-ghost disabled:opacity-30"
         >
           Back
         </button>
         {step < steps.length - 1 ? (
-          <button
-            type="button"
-            onClick={next}
-            className="inline-flex items-center gap-2 rounded-full bg-ca-gold px-5 py-2.5 text-sm font-semibold text-ca-ink hover:bg-ca-gold-light"
-          >
+          <button type="button" onClick={next} className="ca-btn ca-btn-primary">
             Continue <IconArrow className="h-4 w-4" />
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={submit}
-            className="inline-flex items-center gap-2 rounded-full bg-ca-gold px-5 py-2.5 text-sm font-semibold text-ca-ink hover:bg-ca-gold-light"
-          >
+          <button type="button" onClick={submit} className="ca-btn ca-btn-primary">
             Submit booking request <IconCheck className="h-4 w-4" />
           </button>
         )}

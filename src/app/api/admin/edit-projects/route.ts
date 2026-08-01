@@ -7,7 +7,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as { title?: string };
-  const project = await createEditProject(String(body.title ?? ""));
+  const body = (await request.json().catch(() => ({}))) as {
+    title?: string;
+    mode?: "audio" | "audio-video";
+  };
+  const mode = body.mode === "audio" ? "audio" : "audio-video";
+  const project = await createEditProject(String(body.title ?? ""), mode);
   return Response.json({ project }, { status: 201 });
 }

@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useCapability } from "@/components/capability-provider";
 import type { MediaItem } from "@/lib/media-shared";
 import { formatBytes } from "@/lib/media-shared";
 
 export function MediaLibrary() {
+  const { videoOn } = useCapability();
   const [items, setItems] = useState<MediaItem[] | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -69,25 +71,39 @@ export function MediaLibrary() {
           if (e.dataTransfer.files.length) upload(e.dataTransfer.files);
         }}
         className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-10 text-center transition-colors ${
-          dragOver ? "border-ca-gold bg-ca-gold/5" : "border-ca-border bg-ca-panel"
+          dragOver
+            ? "border-ca-gold bg-ca-gold/5"
+            : "border-white/12 bg-ca-panel/80"
         }`}
       >
         <p className="text-sm text-white">
-          {uploading ? `Uploading ${uploading}…` : "Drag & drop video or audio files"}
+          {uploading
+            ? `Uploading ${uploading}…`
+            : videoOn
+              ? "Drag & drop video or audio files"
+              : "Drag & drop multi-track audio files"}
         </p>
-        <p className="mt-1 text-xs text-ca-muted">MP4, MOV, WAV, MP3, AAC…</p>
+        <p className="mt-1 text-xs text-ca-muted">
+          {videoOn ? "MP4, MOV, WAV, MP3, AAC…" : "WAV, MP3, AAC, FLAC…"}
+          {!videoOn && (
+            <span className="block mt-1 text-ca-gold/80">
+              Studio is in audio-only mode — switch to Audio + Video in Settings to
+              upload picture.
+            </span>
+          )}
+        </p>
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={!!uploading}
-          className="mt-4 rounded-full bg-ca-gold px-5 py-2 text-sm font-semibold text-ca-ink transition-colors hover:bg-ca-gold-light disabled:opacity-50"
+          className="ca-btn ca-btn-primary mt-4 disabled:opacity-50"
         >
           Choose files
         </button>
         <input
           ref={inputRef}
           type="file"
-          accept="video/*,audio/*"
+          accept={videoOn ? "video/*,audio/*" : "audio/*"}
           multiple
           className="hidden"
           onChange={(e) => {
@@ -112,7 +128,7 @@ export function MediaLibrary() {
           {items.map((m) => (
             <div
               key={m.id}
-              className="group rounded-2xl border border-ca-border bg-ca-panel p-5 transition-colors hover:border-ca-gold/40"
+              className="ca-card ca-card-hover group p-5"
             >
               <div className="flex items-start justify-between gap-3">
                 <span

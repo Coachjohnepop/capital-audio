@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useCapability } from "@/components/capability-provider";
 import type { MediaItem, MediaMarker, Projection } from "@/lib/media-shared";
 import { formatBytes } from "@/lib/media-shared";
 import { Video360 } from "@/components/video-360";
@@ -17,6 +18,7 @@ function fmtTime(t: number) {
 }
 
 export function MediaEditor({ id }: { id: string }) {
+  const { videoOn } = useCapability();
   const [item, setItem] = useState<MediaItem | null>(null);
   const [missing, setMissing] = useState(false);
   const [title, setTitle] = useState("");
@@ -232,7 +234,7 @@ export function MediaEditor({ id }: { id: string }) {
               }}
               src={src}
               className={
-                projection === "360"
+                videoOn && projection === "360"
                   ? "pointer-events-none absolute h-px w-px opacity-0"
                   : "mx-auto max-h-[60vh] w-full"
               }
@@ -243,24 +245,28 @@ export function MediaEditor({ id }: { id: string }) {
               playsInline
               crossOrigin="anonymous"
             />
-            {projection === "360" && (
+            {videoOn && projection === "360" && (
               <Video360 video={videoEl} className="aspect-video w-full" />
             )}
-            <div className="absolute right-3 top-3 flex overflow-hidden rounded-full border border-white/20 bg-black/60 text-xs backdrop-blur">
-              {(["flat", "360"] as const).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setProjectionPersist(p)}
-                  className={`px-3 py-1.5 font-semibold transition-colors ${
-                    projection === p ? "bg-ca-gold text-ca-ink" : "text-white hover:bg-white/10"
-                  }`}
-                >
-                  {p === "flat" ? "Flat" : "360°"}
-                </button>
-              ))}
-            </div>
-            {projection === "360" && (
+            {videoOn && (
+              <div className="absolute right-3 top-3 flex overflow-hidden rounded-full border border-white/20 bg-black/60 text-xs backdrop-blur">
+                {(["flat", "360"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setProjectionPersist(p)}
+                    className={`px-3 py-1.5 font-semibold transition-colors ${
+                      projection === p
+                        ? "bg-ca-gold text-ca-ink"
+                        : "text-white hover:bg-white/10"
+                    }`}
+                  >
+                    {p === "flat" ? "Flat" : "360°"}
+                  </button>
+                ))}
+              </div>
+            )}
+            {videoOn && projection === "360" && (
               <div className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-black/60 px-3 py-1 text-[10px] uppercase tracking-widest text-white/70">
                 Drag to look · scroll to zoom
               </div>

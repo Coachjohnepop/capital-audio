@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useCapability } from "@/components/capability-provider";
 
 interface ProjectRow {
   id: string;
@@ -18,6 +19,7 @@ function fmtDuration(ms: number) {
 }
 
 export function EditsHome() {
+  const { mode, videoOn } = useCapability();
   const [projects, setProjects] = useState<ProjectRow[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
@@ -39,7 +41,7 @@ export function EditsHome() {
       const res = await fetch("/api/admin/edit-projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
+        body: JSON.stringify({ title, mode }),
       });
       if (res.ok) {
         const data = (await res.json()) as { project: ProjectRow };
@@ -62,8 +64,9 @@ export function EditsHome() {
       <header>
         <h1 className="font-display text-3xl font-semibold text-white">Edits</h1>
         <p className="mt-2 max-w-xl text-sm text-ca-muted">
-          Cut a show together — arrange clips on a timeline, trim, split, detach audio, drop
-          markers. Clips reference the Media Library; the original files are never touched.
+          {videoOn
+            ? "Cut a show together — arrange clips on a timeline, trim, split, detach audio, drop markers. Clips reference the Media Library; originals are never touched."
+            : "Arrange multi-track audio on a timeline — trim, split, fades, markers. New edits start with audio lanes only (studio is in audio-only mode)."}
         </p>
       </header>
 

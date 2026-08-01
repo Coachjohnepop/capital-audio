@@ -192,8 +192,15 @@ export async function getEditProject(id: string): Promise<EditProject | null> {
   };
 }
 
-/** New projects start iMovie-shaped: one video storyline, one audio track. */
-export async function createEditProject(title: string): Promise<EditProject> {
+/**
+ * New projects:
+ * - audio-video: iMovie-shaped V1 storyline + A1
+ * - audio: magnetic A1 storyline only (multi-track arrange without picture)
+ */
+export async function createEditProject(
+  title: string,
+  mode: "audio" | "audio-video" = "audio-video",
+): Promise<EditProject> {
   await dbReady();
   const now = new Date().toISOString();
   const id = crypto.randomBytes(8).toString("hex");
@@ -204,10 +211,53 @@ export async function createEditProject(title: string): Promise<EditProject> {
     createdAt: now,
     updatedAt: now,
   });
-  await db.insert(tracksTable).values([
-    { id: crypto.randomBytes(8).toString("hex"), projectId: id, kind: "video", name: "V1", orderIdx: 0, muted: 0, locked: 0, volume: 1 },
-    { id: crypto.randomBytes(8).toString("hex"), projectId: id, kind: "audio", name: "A1", orderIdx: 1, muted: 0, locked: 0, volume: 1 },
-  ]);
+  if (mode === "audio") {
+    await db.insert(tracksTable).values([
+      {
+        id: crypto.randomBytes(8).toString("hex"),
+        projectId: id,
+        kind: "audio",
+        name: "A1",
+        orderIdx: 0,
+        muted: 0,
+        locked: 0,
+        volume: 1,
+      },
+      {
+        id: crypto.randomBytes(8).toString("hex"),
+        projectId: id,
+        kind: "audio",
+        name: "A2",
+        orderIdx: 1,
+        muted: 0,
+        locked: 0,
+        volume: 1,
+      },
+    ]);
+  } else {
+    await db.insert(tracksTable).values([
+      {
+        id: crypto.randomBytes(8).toString("hex"),
+        projectId: id,
+        kind: "video",
+        name: "V1",
+        orderIdx: 0,
+        muted: 0,
+        locked: 0,
+        volume: 1,
+      },
+      {
+        id: crypto.randomBytes(8).toString("hex"),
+        projectId: id,
+        kind: "audio",
+        name: "A1",
+        orderIdx: 1,
+        muted: 0,
+        locked: 0,
+        volume: 1,
+      },
+    ]);
+  }
   return (await getEditProject(id))!;
 }
 
