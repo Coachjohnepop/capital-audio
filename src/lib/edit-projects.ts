@@ -1,5 +1,12 @@
 import crypto from "crypto";
 import { asc, desc, eq, inArray } from "drizzle-orm";
+import {
+  blobDel,
+  blobGetJson,
+  blobList,
+  blobPutJson,
+  isCloudStore,
+} from "./blob-store";
 import { db, dbReady } from "./db";
 import {
   editClips as clipsTable,
@@ -10,14 +17,15 @@ import {
 } from "./db/schema";
 
 /**
- * Edit timelines — iMovie-style arrangement of clips on tracks. A clip is a
- * reference into a media-library file (srcInMs..srcOutMs at a playback
- * speed); originals are never modified. The saved timeline is also the
- * export recipe a future server-side render job will consume.
- *
- * Track 0 (video) is the magnetic storyline: the client keeps its clips
- * contiguous and sends recomputed startMs values. Audio clips float freely.
+ * Timeline sessions (GarageBand multi-track feeds).
+ * Local: SQLite. Cloud (Vercel): JSON docs in Vercel Blob.
  */
+
+const BLOB_EDITS_PREFIX = "ca/edits/";
+
+function editBlobPath(id: string) {
+  return `${BLOB_EDITS_PREFIX}${id}.json`;
+}
 
 export interface EditEffect {
   id: string;
@@ -87,7 +95,53 @@ export interface EditProjectSummary {
 export const clipDurationMs = (c: Pick<EditClip, "srcInMs" | "srcOutMs" | "speed">) =>
   Math.max(0, Math.round((c.srcOutMs - c.srcInMs) / (c.speed || 1)));
 
+function summarizeProject(p: EditProject): EditProjectSummary {
+  let clipCount = 0;
+  let durationMs = 0;
+  for (const t of p.tracks) {
+    for (const c of t.clips) {
+      clipCount += 1;
+      durationMs = Math.max(
+        durationMs,
+        c.startMs + clipDurationMs(c),
+      );
+    }
+  }
+  return {
+    id: p.id,
+    title: p.title,
+    clipCount,
+    durationMs,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  };
+}
+
+async function listEditProjectsCloud(): Promise<EditProjectSummary[]> {
+  const blobs = await blobList(BLOB_EDITS_PREFIX);
+  const summaries: EditProjectSummary[] = [];
+  await Promise.all(
+    blobs.map(async (b) => {
+      if (!b.pathname.endsWith(".json")) return;
+      const p = await blobGetJson<EditProject>(b.url);
+      if (p?.id) summaries.push(summarizeProject(p));
+    }),
+  );
+  summaries.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+  return summaries;
+}
+
+async function getEditProjectCloud(id: string): Promise<EditProject | null> {
+  const blobs = await blobList(BLOB_EDITS_PREFIX);
+  const hit = blobs.find(
+    (b) => b.pathname === editBlobPath(id) || b.pathname.endsWith(`/${id}.json`),
+  );
+  if (!hit) return null;
+  return blobGetJson<EditProject>(hit.url);
+}
+
 export async function listEditProjects(): Promise<EditProjectSummary[]> {
+  if (isCloudStore()) return listEditProjectsCloud();
   await dbReady();
   const rows = await db.select().from(projectsTable).orderBy(desc(projectsTable.updatedAt));
   const trackRows = await db.select().from(tracksTable);
@@ -114,6 +168,7 @@ export async function listEditProjects(): Promise<EditProjectSummary[]> {
 }
 
 export async function getEditProject(id: string): Promise<EditProject | null> {
+  if (isCloudStore()) return getEditProjectCloud(id);
   await dbReady();
   const rows = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
   if (rows.length === 0) return null;
@@ -201,17 +256,29 @@ export async function createEditProject(
   title: string,
   _mode: "audio" | "audio-video" = "audio-video",
 ): Promise<EditProject> {
-  await dbReady();
   const now = new Date().toISOString();
   const id = crypto.randomBytes(8).toString("hex");
-  await db.insert(projectsTable).values({
+  const project: EditProject = {
     id,
     title: title.trim() || "Untitled session",
+    notes: "",
+    tracks: [],
+    markers: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  if (isCloudStore()) {
+    await blobPutJson(editBlobPath(id), project);
+    return project;
+  }
+  await dbReady();
+  await db.insert(projectsTable).values({
+    id,
+    title: project.title,
     notes: "",
     createdAt: now,
     updatedAt: now,
   });
-  // Tracks are created as feeds are imported (each feed = one instrument lane).
   return (await getEditProject(id))!;
 }
 
@@ -219,6 +286,20 @@ export async function updateEditProject(
   id: string,
   patch: Partial<Pick<EditProject, "title" | "notes" | "tracks" | "markers">>
 ): Promise<EditProject | null> {
+  if (isCloudStore()) {
+    const existing = await getEditProjectCloud(id);
+    if (!existing) return null;
+    const next: EditProject = {
+      ...existing,
+      title: patch.title ?? existing.title,
+      notes: patch.notes ?? existing.notes,
+      tracks: patch.tracks ?? existing.tracks,
+      markers: patch.markers ?? existing.markers,
+      updatedAt: new Date().toISOString(),
+    };
+    await blobPutJson(editBlobPath(id), next);
+    return next;
+  }
   await dbReady();
   const existing = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
   if (existing.length === 0) return null;
@@ -310,6 +391,16 @@ export async function updateEditProject(
 }
 
 export async function deleteEditProject(id: string): Promise<boolean> {
+  if (isCloudStore()) {
+    const existing = await getEditProjectCloud(id);
+    if (!existing) return false;
+    const blobs = await blobList(BLOB_EDITS_PREFIX);
+    const hit = blobs.find(
+      (b) => b.pathname === editBlobPath(id) || b.pathname.endsWith(`/${id}.json`),
+    );
+    if (hit) await blobDel(hit.url);
+    return true;
+  }
   await dbReady();
   const rows = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
   if (rows.length === 0) return false;

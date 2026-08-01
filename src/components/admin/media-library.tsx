@@ -14,10 +14,27 @@ export function MediaLibrary() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
+    setError(null);
     fetch("/api/admin/media")
-      .then((res) => res.json())
-      .then(setItems)
-      .catch(() => setError("Could not load media library"));
+      .then(async (res) => {
+        const body = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(
+            body?.error ||
+              `Could not load media library (${res.status})`,
+          );
+        }
+        if (!Array.isArray(body)) {
+          throw new Error("Unexpected media library response");
+        }
+        setItems(body);
+      })
+      .catch((err) => {
+        setItems([]);
+        setError(
+          err instanceof Error ? err.message : "Could not load media library",
+        );
+      });
   }, []);
 
   useEffect(() => {

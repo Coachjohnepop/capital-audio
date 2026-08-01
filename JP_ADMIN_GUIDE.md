@@ -83,5 +83,5 @@ Media Library → hover a card → **Delete** (top-right of the card). This remo
 On the live site, `/admin` asks for the studio password. Enter it once — it remembers you for 30 days on that browser. On your own computer (`npm run dev`) there is no login.
 
 ## Current limits (will change before launch)
-- Files live on this computer (`.data/` folder). Cloud storage (R2) comes next.
-- Review links work only while the app is running on this machine.
+- **Local:** files live in `.data/` on this computer.
+- **Production (saccapitalaudio.com):** media, timelines, and sync sessions are stored in **Vercel Blob** (durable cloud). Import works on the live site.

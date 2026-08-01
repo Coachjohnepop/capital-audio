@@ -61,7 +61,9 @@ Open [http://localhost:3000](http://localhost:3000).
 - React 19
 - Tailwind CSS 4
 - TypeScript
-- Drizzle + SQLite (local) / Turso (prod path)
+- Drizzle + SQLite (local)
+- **Production:** Vercel Blob for media + studio JSON (timelines/sync)
+- Optional later: Turso `DATABASE_URL` for SQL metadata
 
 ## Deploy (Vercel)
 

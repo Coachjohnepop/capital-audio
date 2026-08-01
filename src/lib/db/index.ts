@@ -23,6 +23,15 @@ let ready: Promise<void> | null = null;
 /** Creates tables on first use and imports the legacy JSON manifest once. */
 export function dbReady(): Promise<void> {
   ready ??= (async () => {
+    // On Vercel without a remote libsql URL, local file SQLite is unusable
+    // across serverless instances. Studio data uses Vercel Blob instead
+    // (see isCloudStore). Still init tables when a real remote DB is set.
+    if (process.env.VERCEL === "1" && url.startsWith("file:")) {
+      console.warn(
+        "[db] Skipping file SQLite on Vercel — use Blob store or set DATABASE_URL to Turso",
+      );
+      return;
+    }
     if (url.startsWith("file:")) {
       await fs.mkdir(path.dirname(url.slice(5)), { recursive: true });
     }

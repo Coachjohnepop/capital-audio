@@ -1,18 +1,30 @@
 import crypto from "crypto";
 import { asc, desc, eq } from "drizzle-orm";
+import {
+  blobDel,
+  blobGetJson,
+  blobList,
+  blobPutJson,
+  isCloudStore,
+} from "./blob-store";
 import { db, dbReady } from "./db";
 import {
   media as mediaTable,
   syncAngles as anglesTable,
   syncProjects as projectsTable,
 } from "./db/schema";
+import { getMedia, listMedia } from "./media";
 
 /**
  * Multi-angle sync projects — one master audio track (the clock) plus N
- * video angles, each carrying an offsetMs that lines it up against the
- * master. Footage lives in the shared media library; a project stores only
- * references + offsets, so files are uploaded once and never modified.
+ * video angles. Local: SQLite. Cloud: JSON in Vercel Blob.
  */
+
+const BLOB_SYNC_PREFIX = "ca/sync/";
+
+function syncBlobPath(id: string) {
+  return `${BLOB_SYNC_PREFIX}${id}.json`;
+}
 
 export interface SyncAngle {
   id: string;
@@ -61,7 +73,43 @@ function toProject(row: ProjectRow, angleRows: AngleRow[]): SyncProject {
   };
 }
 
+async function listSyncProjectsCloud(): Promise<SyncProjectSummary[]> {
+  const blobs = await blobList(BLOB_SYNC_PREFIX);
+  const media = await listMedia();
+  const titles = new Map(media.map((m) => [m.id, m.title]));
+  const out: SyncProjectSummary[] = [];
+  await Promise.all(
+    blobs.map(async (b) => {
+      if (!b.pathname.endsWith(".json")) return;
+      const p = await blobGetJson<SyncProject>(b.url);
+      if (!p?.id) return;
+      out.push({
+        id: p.id,
+        title: p.title,
+        masterMediaId: p.masterMediaId,
+        masterTitle: p.masterMediaId
+          ? (titles.get(p.masterMediaId) ?? null)
+          : null,
+        angleCount: p.angles.length,
+        createdAt: p.createdAt,
+      });
+    }),
+  );
+  out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return out;
+}
+
+async function getSyncProjectCloud(id: string): Promise<SyncProject | null> {
+  const blobs = await blobList(BLOB_SYNC_PREFIX);
+  const hit = blobs.find(
+    (b) => b.pathname === syncBlobPath(id) || b.pathname.endsWith(`/${id}.json`),
+  );
+  if (!hit) return null;
+  return blobGetJson<SyncProject>(hit.url);
+}
+
 export async function listSyncProjects(): Promise<SyncProjectSummary[]> {
+  if (isCloudStore()) return listSyncProjectsCloud();
   await dbReady();
   const rows = await db.select().from(projectsTable).orderBy(desc(projectsTable.createdAt));
   const allAngles = await db.select().from(anglesTable);
@@ -82,6 +130,7 @@ export async function listSyncProjects(): Promise<SyncProjectSummary[]> {
 }
 
 export async function getSyncProject(id: string): Promise<SyncProject | null> {
+  if (isCloudStore()) return getSyncProjectCloud(id);
   await dbReady();
   const rows = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
   if (rows.length === 0) return null;
@@ -94,24 +143,53 @@ export async function getSyncProject(id: string): Promise<SyncProject | null> {
 }
 
 export async function createSyncProject(title: string): Promise<SyncProject> {
-  await dbReady();
   const now = new Date().toISOString();
-  const row: ProjectRow = {
+  const project: SyncProject = {
     id: crypto.randomBytes(8).toString("hex"),
     title: title.trim() || "Untitled session",
     notes: "",
     masterMediaId: null,
+    angles: [],
     createdAt: now,
     updatedAt: now,
   };
-  await db.insert(projectsTable).values(row);
-  return toProject(row, []);
+  if (isCloudStore()) {
+    await blobPutJson(syncBlobPath(project.id), project);
+    return project;
+  }
+  await dbReady();
+  await db.insert(projectsTable).values({
+    id: project.id,
+    title: project.title,
+    notes: "",
+    masterMediaId: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return project;
 }
 
 export async function updateSyncProject(
   id: string,
   patch: Partial<Pick<SyncProject, "title" | "notes" | "masterMediaId" | "angles">>
 ): Promise<SyncProject | null> {
+  if (isCloudStore()) {
+    const existing = await getSyncProjectCloud(id);
+    if (!existing) return null;
+    const next: SyncProject = {
+      ...existing,
+      title: patch.title ?? existing.title,
+      notes: patch.notes ?? existing.notes,
+      masterMediaId:
+        patch.masterMediaId !== undefined
+          ? patch.masterMediaId
+          : existing.masterMediaId,
+      angles: patch.angles ?? existing.angles,
+      updatedAt: new Date().toISOString(),
+    };
+    await blobPutJson(syncBlobPath(id), next);
+    return next;
+  }
   await dbReady();
   const existing = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
   if (existing.length === 0) return null;
@@ -140,6 +218,16 @@ export async function updateSyncProject(
 }
 
 export async function deleteSyncProject(id: string): Promise<boolean> {
+  if (isCloudStore()) {
+    const existing = await getSyncProjectCloud(id);
+    if (!existing) return false;
+    const blobs = await blobList(BLOB_SYNC_PREFIX);
+    const hit = blobs.find(
+      (b) => b.pathname === syncBlobPath(id) || b.pathname.endsWith(`/${id}.json`),
+    );
+    if (hit) await blobDel(hit.url);
+    return true;
+  }
   await dbReady();
   const rows = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
   if (rows.length === 0) return false;

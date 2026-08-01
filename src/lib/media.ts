@@ -4,20 +4,36 @@ import crypto from "crypto";
 import { asc, desc, eq } from "drizzle-orm";
 import { db, dbReady } from "./db";
 import { markers as markersTable, media as mediaTable } from "./db/schema";
+import {
+  blobDelPrefix,
+  blobGetJson,
+  blobList,
+  blobPut,
+  blobPutJson,
+  isCloudStore,
+} from "./blob-store";
 import { kindFromMime, type MediaItem, type MediaMarker } from "./media-shared";
 
 export type { MediaEdit, MediaItem, MediaKind, MediaMarker, Projection } from "./media-shared";
 export { formatBytes, kindFromMime } from "./media-shared";
 
 /**
- * Media store: metadata in the database (SQLite locally, Turso in prod),
- * file bytes on disk under .data/media/ until the R2 driver lands.
+ * Media store:
+ *  - Local: SQLite metadata + .data/media/ files
+ *  - Cloud (Vercel): Vercel Blob for files + meta JSON (durable)
  */
 
 const MEDIA_DIR = path.join(process.cwd(), ".data", "media");
+const BLOB_MEDIA_PREFIX = "ca/media/";
 
 type MediaRow = typeof mediaTable.$inferSelect;
 type MarkerRow = typeof markersTable.$inferSelect;
+
+/** Cloud meta document stored next to the file bytes. */
+export type MediaBlobMeta = MediaItem & {
+  blobUrl: string;
+  blobPathname: string;
+};
 
 function toMarker(r: MarkerRow): MediaMarker {
   return {
@@ -50,7 +66,218 @@ function toItem(row: MediaRow, markerRows: MarkerRow[]): MediaItem {
   };
 }
 
+function metaPath(id: string) {
+  return `${BLOB_MEDIA_PREFIX}${id}/meta.json`;
+}
+
+function filePathname(id: string, ext: string) {
+  return `${BLOB_MEDIA_PREFIX}${id}/file${ext}`;
+}
+
+// ─── public API ─────────────────────────────────────────────
+
 export async function listMedia(): Promise<MediaItem[]> {
+  if (isCloudStore()) return listMediaCloud();
+  return listMediaLocal();
+}
+
+export async function getMedia(id: string): Promise<MediaItem | null> {
+  if (isCloudStore()) return getMediaCloud(id);
+  return getMediaLocal(id);
+}
+
+/** Public URL for the raw bytes when on cloud (null on local). */
+export async function getMediaBlobUrl(id: string): Promise<string | null> {
+  if (!isCloudStore()) return null;
+  const meta = await blobGetJson<MediaBlobMeta>(
+    (await findMetaUrl(id)) ?? metaPath(id),
+  );
+  return meta?.blobUrl ?? null;
+}
+
+export function sanitizeMarkers(raw: unknown): MediaMarker[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((m: Record<string, unknown>) => ({
+    id: String(m.id),
+    t: Math.max(0, Number(m.t) || 0),
+    end:
+      m.end == null || !isFinite(Number(m.end))
+        ? undefined
+        : Math.max(0, Number(m.end)),
+    label: String(m.label ?? "").slice(0, 200),
+    note: m.note ? String(m.note).slice(0, 2000) : undefined,
+    by: m.by === "client" ? "client" : "admin",
+    author: m.author ? String(m.author).slice(0, 80) : undefined,
+  }));
+}
+
+export async function saveUpload(file: File): Promise<MediaItem> {
+  if (isCloudStore()) return saveUploadCloud(file);
+  return saveUploadLocal(file);
+}
+
+export async function updateMedia(
+  id: string,
+  patch: Partial<Pick<MediaItem, "title" | "duration" | "edit" | "projection">>,
+): Promise<MediaItem | null> {
+  if (isCloudStore()) return updateMediaCloud(id, patch);
+  return updateMediaLocal(id, patch);
+}
+
+export async function addClientMarker(
+  id: string,
+  marker: MediaMarker,
+): Promise<MediaItem | null> {
+  if (isCloudStore()) {
+    const item = await getMediaCloud(id);
+    if (!item) return null;
+    const next = {
+      ...item,
+      edit: {
+        ...item.edit,
+        markers: [...item.edit.markers, marker],
+      },
+    };
+    return writeMediaMeta(next);
+  }
+  await dbReady();
+  const existing = await db.select().from(mediaTable).where(eq(mediaTable.id, id));
+  if (existing.length === 0) return null;
+  await db.insert(markersTable).values({
+    id: marker.id,
+    mediaId: id,
+    t: marker.t,
+    end: marker.end ?? null,
+    label: marker.label,
+    note: marker.note ?? null,
+    by: marker.by,
+    author: marker.author ?? null,
+    createdAt: new Date().toISOString(),
+  });
+  return getMediaLocal(id);
+}
+
+export async function deleteMedia(id: string): Promise<boolean> {
+  if (isCloudStore()) {
+    const existing = await getMediaCloud(id);
+    if (!existing) return false;
+    await blobDelPrefix(`${BLOB_MEDIA_PREFIX}${id}/`);
+    return true;
+  }
+  await dbReady();
+  const rows = await db.select().from(mediaTable).where(eq(mediaTable.id, id));
+  if (rows.length === 0) return false;
+  await db.delete(markersTable).where(eq(markersTable.mediaId, id));
+  await db.delete(mediaTable).where(eq(mediaTable.id, id));
+  await fs.rm(path.join(MEDIA_DIR, rows[0].filename), { force: true });
+  return true;
+}
+
+export function getFilePath(item: MediaItem) {
+  return path.join(MEDIA_DIR, item.filename);
+}
+
+// ─── cloud ──────────────────────────────────────────────────
+
+async function findMetaUrl(id: string): Promise<string | null> {
+  const items = await blobList(`${BLOB_MEDIA_PREFIX}${id}/`);
+  return items.find((i) => i.pathname.endsWith("/meta.json"))?.url ?? null;
+}
+
+async function listMediaCloud(): Promise<MediaItem[]> {
+  const all = await blobList(BLOB_MEDIA_PREFIX);
+  const metas = all.filter((b) => b.pathname.endsWith("/meta.json"));
+  const items: MediaItem[] = [];
+  await Promise.all(
+    metas.map(async (m) => {
+      const doc = await blobGetJson<MediaBlobMeta>(m.url);
+      if (doc?.id) items.push(stripBlobFields(doc));
+    }),
+  );
+  items.sort((a, b) => (a.uploadedAt < b.uploadedAt ? 1 : -1));
+  return items;
+}
+
+async function getMediaCloud(id: string): Promise<MediaItem | null> {
+  const url = await findMetaUrl(id);
+  if (!url) return null;
+  const doc = await blobGetJson<MediaBlobMeta>(url);
+  return doc ? stripBlobFields(doc) : null;
+}
+
+function stripBlobFields(doc: MediaBlobMeta): MediaItem {
+  const { blobUrl: _u, blobPathname: _p, ...item } = doc;
+  return item;
+}
+
+async function writeMediaMeta(item: MediaItem & Partial<MediaBlobMeta>): Promise<MediaItem> {
+  // preserve blobUrl if we already have it
+  let blobUrl = item.blobUrl;
+  let blobPathname = item.blobPathname;
+  if (!blobUrl) {
+    const existing = await blobGetJson<MediaBlobMeta>(
+      (await findMetaUrl(item.id)) ?? metaPath(item.id),
+    );
+    blobUrl = existing?.blobUrl;
+    blobPathname = existing?.blobPathname;
+  }
+  const doc: MediaBlobMeta = {
+    ...item,
+    blobUrl: blobUrl ?? "",
+    blobPathname: blobPathname ?? "",
+  };
+  await blobPutJson(metaPath(item.id), doc);
+  return stripBlobFields(doc);
+}
+
+async function saveUploadCloud(file: File): Promise<MediaItem> {
+  const kind = kindFromMime(file.type);
+  if (!kind) throw new Error(`Unsupported type: ${file.type || "unknown"}`);
+
+  const id = crypto.randomBytes(8).toString("hex");
+  const ext = path.extname(file.name) || (kind === "video" ? ".mp4" : ".wav");
+  const pathname = filePathname(id, ext);
+  const buf = Buffer.from(await file.arrayBuffer());
+
+  const uploaded = await blobPut(pathname, buf, file.type || undefined);
+
+  const item: MediaBlobMeta = {
+    id,
+    kind,
+    title: file.name.replace(/\.[^.]+$/, ""),
+    filename: path.basename(pathname),
+    mime: file.type,
+    size: buf.length,
+    uploadedAt: new Date().toISOString(),
+    duration: null,
+    projection: undefined,
+    edit: { trimIn: 0, trimOut: null, markers: [] },
+    blobUrl: uploaded.url,
+    blobPathname: uploaded.pathname,
+  };
+  await blobPutJson(metaPath(id), item);
+  return stripBlobFields(item);
+}
+
+async function updateMediaCloud(
+  id: string,
+  patch: Partial<Pick<MediaItem, "title" | "duration" | "edit" | "projection">>,
+): Promise<MediaItem | null> {
+  const url = await findMetaUrl(id);
+  if (!url) return null;
+  const doc = await blobGetJson<MediaBlobMeta>(url);
+  if (!doc) return null;
+  if (patch.title !== undefined) doc.title = patch.title;
+  if (patch.duration !== undefined) doc.duration = patch.duration;
+  if (patch.projection !== undefined) doc.projection = patch.projection;
+  if (patch.edit !== undefined) doc.edit = patch.edit;
+  await blobPutJson(metaPath(id), doc);
+  return stripBlobFields(doc);
+}
+
+// ─── local ──────────────────────────────────────────────────
+
+async function listMediaLocal(): Promise<MediaItem[]> {
   await dbReady();
   const rows = await db.select().from(mediaTable).orderBy(desc(mediaTable.uploadedAt));
   const allMarkers = await db.select().from(markersTable).orderBy(asc(markersTable.t));
@@ -63,7 +290,7 @@ export async function listMedia(): Promise<MediaItem[]> {
   return rows.map((r) => toItem(r, byMedia.get(r.id) ?? []));
 }
 
-export async function getMedia(id: string): Promise<MediaItem | null> {
+async function getMediaLocal(id: string): Promise<MediaItem | null> {
   await dbReady();
   const rows = await db.select().from(mediaTable).where(eq(mediaTable.id, id));
   if (rows.length === 0) return null;
@@ -75,21 +302,7 @@ export async function getMedia(id: string): Promise<MediaItem | null> {
   return toItem(rows[0], markerRows);
 }
 
-export function sanitizeMarkers(raw: unknown): MediaMarker[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((m: Record<string, unknown>) => ({
-    id: String(m.id),
-    t: Math.max(0, Number(m.t) || 0),
-    end:
-      m.end == null || !isFinite(Number(m.end)) ? undefined : Math.max(0, Number(m.end)),
-    label: String(m.label ?? "").slice(0, 200),
-    note: m.note ? String(m.note).slice(0, 2000) : undefined,
-    by: m.by === "client" ? "client" : "admin",
-    author: m.author ? String(m.author).slice(0, 80) : undefined,
-  }));
-}
-
-export async function saveUpload(file: File): Promise<MediaItem> {
+async function saveUploadLocal(file: File): Promise<MediaItem> {
   await dbReady();
   const kind = kindFromMime(file.type);
   if (!kind) throw new Error(`Unsupported type: ${file.type || "unknown"}`);
@@ -119,9 +332,9 @@ export async function saveUpload(file: File): Promise<MediaItem> {
   return toItem(row, []);
 }
 
-export async function updateMedia(
+async function updateMediaLocal(
   id: string,
-  patch: Partial<Pick<MediaItem, "title" | "duration" | "edit" | "projection">>
+  patch: Partial<Pick<MediaItem, "title" | "duration" | "edit" | "projection">>,
 ): Promise<MediaItem | null> {
   await dbReady();
   const fields: Partial<MediaRow> = {};
@@ -136,7 +349,6 @@ export async function updateMedia(
     await db.update(mediaTable).set(fields).where(eq(mediaTable.id, id));
   }
   if (patch.edit !== undefined) {
-    // The edit payload carries the full marker set — replace wholesale.
     await db.delete(markersTable).where(eq(markersTable.mediaId, id));
     for (const m of patch.edit.markers) {
       await db.insert(markersTable).values({
@@ -152,40 +364,5 @@ export async function updateMedia(
       });
     }
   }
-  return getMedia(id);
-}
-
-export async function addClientMarker(
-  id: string,
-  marker: MediaMarker
-): Promise<MediaItem | null> {
-  await dbReady();
-  const existing = await db.select().from(mediaTable).where(eq(mediaTable.id, id));
-  if (existing.length === 0) return null;
-  await db.insert(markersTable).values({
-    id: marker.id,
-    mediaId: id,
-    t: marker.t,
-    end: marker.end ?? null,
-    label: marker.label,
-    note: marker.note ?? null,
-    by: marker.by,
-    author: marker.author ?? null,
-    createdAt: new Date().toISOString(),
-  });
-  return getMedia(id);
-}
-
-export async function deleteMedia(id: string): Promise<boolean> {
-  await dbReady();
-  const rows = await db.select().from(mediaTable).where(eq(mediaTable.id, id));
-  if (rows.length === 0) return false;
-  await db.delete(markersTable).where(eq(markersTable.mediaId, id));
-  await db.delete(mediaTable).where(eq(mediaTable.id, id));
-  await fs.rm(path.join(MEDIA_DIR, rows[0].filename), { force: true });
-  return true;
-}
-
-export function getFilePath(item: MediaItem) {
-  return path.join(MEDIA_DIR, item.filename);
+  return getMediaLocal(id);
 }
