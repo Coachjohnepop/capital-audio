@@ -2,19 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCapability } from "@/components/capability-provider";
 import { CapabilityToggle } from "@/components/admin/capability-toggle";
 
 export function AdminNav() {
   const pathname = usePathname();
-  const { videoOn } = useCapability();
 
+  // Pipeline: Media → Multicam Sync (Resolve-style) → Timeline
   const nav = [
     { href: "/admin", label: "Dashboard", exact: true },
     { href: "/admin/media", label: "Media" },
-    ...(videoOn
-      ? [{ href: "/admin/sync-editor", label: "Sync" }]
-      : []),
+    { href: "/admin/sync-editor", label: "Multicam" },
     { href: "/admin/edits", label: "Timeline" },
     { href: "/admin/settings", label: "Settings" },
   ];
