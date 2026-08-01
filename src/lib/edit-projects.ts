@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import {
   blobDel,
+  blobDelPrefix,
   blobGetJson,
   blobList,
   blobPutJson,
