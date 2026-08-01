@@ -1,9 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
 import crypto from "crypto";
-import { asc, desc, eq } from "drizzle-orm";
-import { db, dbReady } from "./db";
-import { markers as markersTable, media as mediaTable } from "./db/schema";
 import {
   blobDelPrefix,
   blobGetJson,
@@ -13,6 +10,14 @@ import {
   isCloudStore,
 } from "./blob-store";
 import { kindFromMime, type MediaItem, type MediaMarker } from "./media-shared";
+
+/** Local-only DB imports are dynamic so Vercel never opens SQLite at load. */
+async function localDb() {
+  const { db, dbReady } = await import("./db");
+  const schema = await import("./db/schema");
+  await dbReady();
+  return { db, mediaTable: schema.media, markersTable: schema.markers };
+}
 
 export type { MediaEdit, MediaItem, MediaKind, MediaMarker, Projection } from "./media-shared";
 export { formatBytes, kindFromMime } from "./media-shared";
@@ -26,16 +31,14 @@ export { formatBytes, kindFromMime } from "./media-shared";
 const MEDIA_DIR = path.join(process.cwd(), ".data", "media");
 const BLOB_MEDIA_PREFIX = "ca/media/";
 
-type MediaRow = typeof mediaTable.$inferSelect;
-type MarkerRow = typeof markersTable.$inferSelect;
-
 /** Cloud meta document stored next to the file bytes. */
 export type MediaBlobMeta = MediaItem & {
   blobUrl: string;
   blobPathname: string;
 };
 
-function toMarker(r: MarkerRow): MediaMarker {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toMarker(r: any): MediaMarker {
   return {
     id: r.id,
     t: r.t,
@@ -47,7 +50,8 @@ function toMarker(r: MarkerRow): MediaMarker {
   };
 }
 
-function toItem(row: MediaRow, markerRows: MarkerRow[]): MediaItem {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toItem(row: any, markerRows: any[]): MediaItem {
   return {
     id: row.id,
     kind: row.kind,
@@ -140,7 +144,8 @@ export async function addClientMarker(
     };
     return writeMediaMeta(next);
   }
-  await dbReady();
+  const { db, mediaTable, markersTable } = await localDb();
+  const { eq } = await import("drizzle-orm");
   const existing = await db.select().from(mediaTable).where(eq(mediaTable.id, id));
   if (existing.length === 0) return null;
   await db.insert(markersTable).values({
@@ -164,7 +169,8 @@ export async function deleteMedia(id: string): Promise<boolean> {
     await blobDelPrefix(`${BLOB_MEDIA_PREFIX}${id}/`);
     return true;
   }
-  await dbReady();
+  const { db, mediaTable, markersTable } = await localDb();
+  const { eq } = await import("drizzle-orm");
   const rows = await db.select().from(mediaTable).where(eq(mediaTable.id, id));
   if (rows.length === 0) return false;
   await db.delete(markersTable).where(eq(markersTable.mediaId, id));
@@ -278,10 +284,12 @@ async function updateMediaCloud(
 // ─── local ──────────────────────────────────────────────────
 
 async function listMediaLocal(): Promise<MediaItem[]> {
-  await dbReady();
+  const { db, mediaTable, markersTable } = await localDb();
+  const { asc, desc } = await import("drizzle-orm");
   const rows = await db.select().from(mediaTable).orderBy(desc(mediaTable.uploadedAt));
   const allMarkers = await db.select().from(markersTable).orderBy(asc(markersTable.t));
-  const byMedia = new Map<string, MarkerRow[]>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byMedia = new Map<string, any[]>();
   for (const m of allMarkers) {
     const list = byMedia.get(m.mediaId) ?? [];
     list.push(m);
@@ -291,7 +299,8 @@ async function listMediaLocal(): Promise<MediaItem[]> {
 }
 
 async function getMediaLocal(id: string): Promise<MediaItem | null> {
-  await dbReady();
+  const { db, mediaTable, markersTable } = await localDb();
+  const { asc, eq } = await import("drizzle-orm");
   const rows = await db.select().from(mediaTable).where(eq(mediaTable.id, id));
   if (rows.length === 0) return null;
   const markerRows = await db
@@ -303,7 +312,7 @@ async function getMediaLocal(id: string): Promise<MediaItem | null> {
 }
 
 async function saveUploadLocal(file: File): Promise<MediaItem> {
-  await dbReady();
+  const { db, mediaTable } = await localDb();
   const kind = kindFromMime(file.type);
   if (!kind) throw new Error(`Unsupported type: ${file.type || "unknown"}`);
 
@@ -315,7 +324,7 @@ async function saveUploadLocal(file: File): Promise<MediaItem> {
   const buf = Buffer.from(await file.arrayBuffer());
   await fs.writeFile(path.join(MEDIA_DIR, storedName), buf);
 
-  const row: MediaRow = {
+  await db.insert(mediaTable).values({
     id,
     kind,
     title: file.name.replace(/\.[^.]+$/, ""),
@@ -327,17 +336,33 @@ async function saveUploadLocal(file: File): Promise<MediaItem> {
     projection: null,
     trimIn: 0,
     trimOut: null,
-  };
-  await db.insert(mediaTable).values(row);
-  return toItem(row, []);
+  });
+  return toItem(
+    {
+      id,
+      kind,
+      title: file.name.replace(/\.[^.]+$/, ""),
+      filename: storedName,
+      mime: file.type,
+      size: buf.length,
+      uploadedAt: new Date().toISOString(),
+      duration: null,
+      projection: null,
+      trimIn: 0,
+      trimOut: null,
+    },
+    [],
+  );
 }
 
 async function updateMediaLocal(
   id: string,
   patch: Partial<Pick<MediaItem, "title" | "duration" | "edit" | "projection">>,
 ): Promise<MediaItem | null> {
-  await dbReady();
-  const fields: Partial<MediaRow> = {};
+  const { db, mediaTable, markersTable } = await localDb();
+  const { eq } = await import("drizzle-orm");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fields: Record<string, any> = {};
   if (patch.title !== undefined) fields.title = patch.title;
   if (patch.duration !== undefined) fields.duration = patch.duration;
   if (patch.projection !== undefined) fields.projection = patch.projection;

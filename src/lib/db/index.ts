@@ -1,40 +1,74 @@
-import { createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
+import { createClient, type Client } from "@libsql/client";
+import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import { promises as fs } from "fs";
 import path from "path";
 import * as schema from "./schema";
 
 /**
  * DATABASE_URL:
- *  - unset / file:  → local SQLite at .data/capital-audio.db (dev)
- *  - libsql://…     → Turso (production; set DATABASE_AUTH_TOKEN too)
+ *  - unset (local) → file:.data/capital-audio.db
+ *  - unset (Vercel) → skipped when Blob cloud store is active; else /tmp
+ *  - libsql://…     → Turso (set DATABASE_AUTH_TOKEN)
+ *
+ * Client is lazy — never open SQLite at module load on Vercel (that 500'd
+ * the media API via the import graph).
  */
-const url = process.env.DATABASE_URL ?? "file:.data/capital-audio.db";
 
-const client = createClient({
-  url,
-  authToken: process.env.DATABASE_AUTH_TOKEN,
-});
+function resolveDbUrl(): string {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  if (process.env.VERCEL === "1") {
+    // Ephemeral; only used if something still hits SQLite on Vercel.
+    return "file:/tmp/capital-audio.db";
+  }
+  return "file:.data/capital-audio.db";
+}
 
-export const db = drizzle(client, { schema });
+type SchemaDb = LibSQLDatabase<typeof schema>;
 
+let _client: Client | null = null;
+let _db: SchemaDb | null = null;
 let ready: Promise<void> | null = null;
 
-/** Creates tables on first use and imports the legacy JSON manifest once. */
+function getClient(): Client {
+  if (_client) return _client;
+  const url = resolveDbUrl();
+  _client = createClient({
+    url,
+    authToken: process.env.DATABASE_AUTH_TOKEN,
+  });
+  return _client;
+}
+
+/** Lazy Drizzle instance — do not touch at import time. */
+export const db: SchemaDb = new Proxy({} as SchemaDb, {
+  get(_target, prop, receiver) {
+    if (!_db) {
+      _db = drizzle(getClient(), { schema });
+    }
+    const value = Reflect.get(_db as object, prop, receiver);
+    return typeof value === "function" ? value.bind(_db) : value;
+  },
+});
+
+/** Creates tables on first use (local / Turso only). */
 export function dbReady(): Promise<void> {
   ready ??= (async () => {
-    // On Vercel without a remote libsql URL, local file SQLite is unusable
-    // across serverless instances. Studio data uses Vercel Blob instead
-    // (see isCloudStore). Still init tables when a real remote DB is set.
-    if (process.env.VERCEL === "1" && url.startsWith("file:")) {
-      console.warn(
-        "[db] Skipping file SQLite on Vercel — use Blob store or set DATABASE_URL to Turso",
-      );
+    // Cloud studio uses Vercel Blob — skip SQLite entirely on Vercel unless
+    // a remote Turso URL is configured.
+    if (
+      process.env.VERCEL === "1" &&
+      !process.env.DATABASE_URL?.startsWith("libsql")
+    ) {
       return;
     }
+
+    const url = resolveDbUrl();
     if (url.startsWith("file:")) {
-      await fs.mkdir(path.dirname(url.slice(5)), { recursive: true });
+      const filePath = url.slice("file:".length);
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
     }
+
+    const client = getClient();
     await client.executeMultiple(`
       CREATE TABLE IF NOT EXISTS media (
         id TEXT PRIMARY KEY,
@@ -137,14 +171,13 @@ export function dbReady(): Promise<void> {
   return ready;
 }
 
-/** One-time import of the pre-database .data/media.json manifest. */
 async function importLegacyManifest() {
   const manifestPath = path.join(process.cwd(), ".data", "media.json");
   let legacy: Array<Record<string, unknown>>;
   try {
     legacy = JSON.parse(await fs.readFile(manifestPath, "utf8"));
   } catch {
-    return; // no legacy manifest — nothing to do
+    return;
   }
   const existing = await db.select({ id: schema.media.id }).from(schema.media);
   const known = new Set(existing.map((r) => r.id));
@@ -181,6 +214,5 @@ async function importLegacyManifest() {
       });
     }
   }
-  // Leave the JSON file in place, renamed, as a safety backup
   await fs.rename(manifestPath, `${manifestPath}.imported`).catch(() => {});
 }
