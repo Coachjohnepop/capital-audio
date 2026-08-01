@@ -22,7 +22,24 @@ export async function POST(request: Request) {
     const blobUrl = String(body.blobUrl ?? "").trim();
     const mime = String(body.mime ?? "application/octet-stream");
     const size = Number(body.size) || 0;
-    const kind = kindFromMime(mime) ?? (mime.startsWith("video") ? "video" : null);
+    let kind = kindFromMime(mime);
+    if (!kind && mime.startsWith("video")) kind = "video";
+    if (!kind && mime.startsWith("audio")) kind = "audio";
+    // Fall back from filename when type is empty/octet-stream
+    if (!kind && body.filename) {
+      const { kindFromFile } = await import("@/lib/media-shared");
+      kind = kindFromFile({
+        name: String(body.filename),
+        type: mime,
+      });
+    }
+    if (!kind && body.blobPathname) {
+      const { kindFromFile } = await import("@/lib/media-shared");
+      kind = kindFromFile({
+        name: String(body.blobPathname),
+        type: mime,
+      });
+    }
 
     if (!id || !blobUrl) {
       return Response.json(

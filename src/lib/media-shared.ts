@@ -43,9 +43,55 @@ export interface MediaItem {
 }
 
 export function kindFromMime(mime: string): MediaKind | null {
+  if (!mime) return null;
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
   return null;
+}
+
+/** Infer kind when the browser leaves type empty (common for some .mov/.wav). */
+export function kindFromFile(file: { name: string; type: string }): MediaKind | null {
+  const fromMime = kindFromMime(file.type);
+  if (fromMime) return fromMime;
+  const ext = file.name.includes(".")
+    ? file.name.slice(file.name.lastIndexOf(".")).toLowerCase()
+    : "";
+  if (
+    [".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".mpeg", ".mpg"].includes(
+      ext,
+    )
+  ) {
+    return "video";
+  }
+  if (
+    [".mp3", ".wav", ".aac", ".m4a", ".flac", ".ogg", ".aif", ".aiff", ".wma"].includes(
+      ext,
+    )
+  ) {
+    return "audio";
+  }
+  return null;
+}
+
+export function mimeFromFile(file: { name: string; type: string }): string {
+  if (file.type) return file.type;
+  const ext = file.name.includes(".")
+    ? file.name.slice(file.name.lastIndexOf(".")).toLowerCase()
+    : "";
+  const map: Record<string, string> = {
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".m4v": "video/x-m4v",
+    ".webm": "video/webm",
+    ".mkv": "video/x-matroska",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+  };
+  return map[ext] ?? "application/octet-stream";
 }
 
 export function formatBytes(n: number) {

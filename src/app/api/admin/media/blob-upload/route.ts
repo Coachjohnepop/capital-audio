@@ -19,6 +19,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           throw new Error("Invalid upload path");
         }
         return {
+          // Broad list — browsers report inconsistent types for .mov/.m4a
           allowedContentTypes: [
             "video/mp4",
             "video/quicktime",
@@ -26,6 +27,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             "video/x-msvideo",
             "video/x-matroska",
             "video/mpeg",
+            "video/x-m4v",
             "audio/mpeg",
             "audio/mp4",
             "audio/wav",
@@ -36,11 +38,12 @@ export async function POST(request: Request): Promise<NextResponse> {
             "audio/ogg",
             "audio/webm",
             "audio/x-m4a",
+            "audio/m4a",
             "application/octet-stream",
+            "application/mp4",
           ],
           addRandomSuffix: false,
           allowOverwrite: true,
-          // Multi-cam masters can be large; Blob multipart supports big files
           maximumSizeInBytes: 5 * 1024 * 1024 * 1024, // 5 GB
         };
       },

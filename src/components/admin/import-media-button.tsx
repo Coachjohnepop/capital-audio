@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { upload } from "@vercel/blob/client";
 import { useCapability } from "@/components/capability-provider";
-import { kindFromMime, type MediaItem } from "@/lib/media-shared";
+import { importMediaFiles } from "@/lib/import-media-client";
+import type { MediaItem } from "@/lib/media-shared";
 
 type AcceptMode = "any" | "video" | "audio";
 
@@ -18,24 +18,16 @@ type Props = {
   multiple?: boolean;
 };
 
-/** Above this, use browser → Vercel Blob direct upload (avoids HTTP 413). */
-const CLIENT_UPLOAD_THRESHOLD = 3.5 * 1024 * 1024; // 3.5 MB
-
 function acceptAttr(mode: AcceptMode, videoOn: boolean): string {
-  if (mode === "video") return "video/*";
-  if (mode === "audio") return "audio/*";
-  return videoOn ? "video/*,audio/*" : "audio/*";
-}
-
-function randomId() {
-  const bytes = new Uint8Array(8);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  if (mode === "video") return "video/*,.mov,.mp4,.m4v";
+  if (mode === "audio") return "audio/*,.wav,.mp3,.m4a,.aac,.flac";
+  return videoOn
+    ? "video/*,audio/*,.mov,.mp4,.wav,.mp3,.m4a"
+    : "audio/*,.wav,.mp3,.m4a,.aac,.flac";
 }
 
 /**
- * Import control — large files upload straight to Vercel Blob from the browser
- * (no serverless body limit). Small files / local dev use the API FormData path.
+ * Import control — large files upload straight to Vercel Blob from the browser.
  */
 export function ImportMediaButton({
   onImported,
@@ -72,101 +64,29 @@ export function ImportMediaButton({
   const sizeClass =
     size === "sm" ? "ca-btn-sm" : size === "lg" ? "ca-btn-lg" : "";
 
-  const uploadOne = useCallback(async (file: File): Promise<MediaItem> => {
-    const kind =
-      kindFromMime(file.type) ??
-      (file.type.startsWith("video")
-        ? "video"
-        : file.type.startsWith("audio")
-          ? "audio"
-          : null);
-    if (!kind) {
-      throw new Error(`Unsupported type: ${file.type || file.name}`);
-    }
-
-    const useClientUpload =
-      file.size > CLIENT_UPLOAD_THRESHOLD ||
-      // Prefer client path on hosted deployments
-      (typeof window !== "undefined" &&
-        !window.location.hostname.includes("localhost"));
-
-    if (useClientUpload) {
-      const id = randomId();
-      const ext =
-        file.name.includes(".")
-          ? file.name.slice(file.name.lastIndexOf("."))
-          : kind === "video"
-            ? ".mp4"
-            : ".wav";
-      const pathname = `ca/media/${id}/file${ext}`;
-
-      const blob = await upload(pathname, file, {
-        access: "public",
-        handleUploadUrl: "/api/admin/media/blob-upload",
-        multipart: file.size > CLIENT_UPLOAD_THRESHOLD,
-      });
-
-      const res = await fetch("/api/admin/media/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id,
-          title: file.name.replace(/\.[^.]+$/, ""),
-          mime: file.type || "application/octet-stream",
-          size: file.size,
-          blobUrl: blob.url,
-          blobPathname: blob.pathname,
-          filename: `file${ext}`,
-        }),
-      });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(body?.error ?? `Register failed (${res.status})`);
-      }
-      return body as MediaItem;
-    }
-
-    // Local / small files: classic FormData through the API
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch("/api/admin/media", {
-      method: "POST",
-      body: form,
-    });
-    const body = await res.json().catch(() => null);
-    if (!res.ok) {
-      throw new Error(body?.error ?? `Upload failed (${res.status})`);
-    }
-    return body as MediaItem;
-  }, []);
-
-  const uploadFiles = useCallback(
+  const runImport = useCallback(
     async (files: FileList | File[]) => {
       const list = Array.from(files);
       if (!list.length) return;
       setError(null);
       setBusy(true);
-      const done: MediaItem[] = [];
-      for (let i = 0; i < list.length; i++) {
-        const file = list[i];
-        setProgress(
-          list.length > 1
-            ? `Importing ${i + 1}/${list.length}: ${file.name}`
-            : `Importing ${file.name}…`,
-        );
-        try {
-          const item = await uploadOne(file);
-          done.push(item);
-          await onImported?.(item);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Import failed");
+      try {
+        const { done, errors } = await importMediaFiles(list, {
+          onProgress: setProgress,
+          onItem: onImported,
+        });
+        if (errors.length) {
+          setError(errors.join(" · "));
         }
+        await onBatchDone?.(done);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Import failed");
+      } finally {
+        setProgress(null);
+        setBusy(false);
       }
-      setProgress(null);
-      setBusy(false);
-      await onBatchDone?.(done);
     },
-    [onImported, onBatchDone, uploadOne],
+    [onImported, onBatchDone],
   );
 
   return (
@@ -187,7 +107,7 @@ export function ImportMediaButton({
         multiple={multiple}
         className="hidden"
         onChange={(e) => {
-          if (e.target.files?.length) void uploadFiles(e.target.files);
+          if (e.target.files?.length) void runImport(e.target.files);
           e.target.value = "";
         }}
       />

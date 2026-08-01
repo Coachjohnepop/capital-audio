@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useCapability } from "@/components/capability-provider";
 import { ImportMediaPair } from "@/components/admin/import-media-button";
+import { importMediaFiles } from "@/lib/import-media-client";
 import type { MediaItem } from "@/lib/media-shared";
 import { formatBytes } from "@/lib/media-shared";
 
@@ -12,6 +13,8 @@ export function MediaLibrary() {
   const [items, setItems] = useState<MediaItem[] | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dropBusy, setDropBusy] = useState(false);
+  const [dropProgress, setDropProgress] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     setError(null);
@@ -20,8 +23,7 @@ export function MediaLibrary() {
         const body = await res.json().catch(() => null);
         if (!res.ok) {
           throw new Error(
-            body?.error ||
-              `Could not load media library (${res.status})`,
+            body?.error || `Could not load media library (${res.status})`,
           );
         }
         if (!Array.isArray(body)) {
@@ -41,36 +43,41 @@ export function MediaLibrary() {
     refresh();
   }, [refresh]);
 
-  // Drag-drop reuses ImportMediaButton path via a hidden helper: refresh after
-  // any drop by posting through the same client-upload logic is heavier here,
-  // so drops still call the API — large drops should use the Import buttons.
+  /** Same plumbing as Import buttons — Blob client upload for large files. */
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
+      const list = Array.from(files);
+      if (!list.length) return;
       setError(null);
-      // Prefer clicking Import for large video; drag-drop still tries API.
-      for (const file of Array.from(files)) {
-        if (file.size > 3.5 * 1024 * 1024) {
-          setError(
-            "That file is large — use Import video / Import audio (direct cloud upload). Drag-and-drop is for smaller files only.",
-          );
-          continue;
+      setDropBusy(true);
+      setDropProgress(`Importing ${list.length} file${list.length === 1 ? "" : "s"}…`);
+      try {
+        const { done, errors } = await importMediaFiles(list, {
+          onProgress: setDropProgress,
+        });
+        if (errors.length) {
+          setError(errors.join(" · "));
         }
-        const form = new FormData();
-        form.append("file", file);
-        try {
-          const res = await fetch("/api/admin/media", {
-            method: "POST",
-            body: form,
+        if (done.length) {
+          // Optimistic: prepend then full refresh
+          setItems((prev) => {
+            const next = prev ? [...done, ...prev] : done;
+            // de-dupe by id
+            const seen = new Set<string>();
+            return next.filter((m) => {
+              if (seen.has(m.id)) return false;
+              seen.add(m.id);
+              return true;
+            });
           });
-          if (!res.ok) {
-            const body = await res.json().catch(() => null);
-            throw new Error(body?.error ?? `Upload failed (${res.status})`);
-          }
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Upload failed");
         }
+        refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Upload failed");
+      } finally {
+        setDropBusy(false);
+        setDropProgress(null);
       }
-      refresh();
     },
     [refresh],
   );
@@ -85,50 +92,76 @@ export function MediaLibrary() {
 
   return (
     <div className="mt-8 space-y-6">
-      {/* iMovie-style import strip */}
       <div className="ca-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-medium text-white">Import media</p>
           <p className="mt-1 text-xs leading-relaxed text-ca-muted">
             {videoOn
-              ? "Each file is a feed — Cam A, Cam B, board mix — like instruments in GarageBand. Open Timeline to stack them in parallel and line them up."
+              ? "Each file is a feed — Cam A, Cam B, board mix, B-roll, song — like instruments in GarageBand. Drag-and-drop or use the buttons (same cloud path)."
               : "Each file is a feed/stem — import, then open Timeline to stack them in parallel."}
           </p>
         </div>
         <ImportMediaPair onBatchDone={() => refresh()} />
       </div>
 
-      {/* Drop zone */}
+      {/* Drop zone — same import plumbing as buttons */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           setDragOver(true);
         }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
+        onDragEnter={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
           e.preventDefault();
           setDragOver(false);
-          if (e.dataTransfer.files.length) void uploadFiles(e.dataTransfer.files);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDragOver(false);
+          if (e.dataTransfer.files.length) {
+            void uploadFiles(e.dataTransfer.files);
+          }
         }}
         className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
-          dragOver
-            ? "border-ca-gold bg-ca-gold/5"
-            : "border-white/12 bg-ca-panel/50"
+          dropBusy
+            ? "border-ca-gold/50 bg-ca-gold/10"
+            : dragOver
+              ? "border-ca-gold bg-ca-gold/5"
+              : "border-white/12 bg-ca-panel/50"
         }`}
       >
-        <p className="text-sm text-white">
-          Or drag & drop files here
-        </p>
-        <p className="mt-1 text-xs text-ca-muted">
-          {videoOn
-            ? "MP4, MOV, WAV, MP3, AAC… · multiple files at once"
-            : "WAV, MP3, AAC, FLAC… · multiple files at once"}
-        </p>
-        {!videoOn && (
-          <p className="mt-2 text-xs text-ca-gold/80">
-            Studio is audio-only — switch to Audio + Video in Settings to import
-            picture.
-          </p>
+        {dropBusy ? (
+          <>
+            <p className="text-sm font-medium text-ca-gold">
+              {dropProgress ?? "Importing…"}
+            </p>
+            <p className="mt-2 text-xs text-ca-muted">
+              Keep this tab open — large masters upload directly to cloud storage.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-white">
+              {dragOver ? "Drop to import" : "Or drag & drop files here"}
+            </p>
+            <p className="mt-1 text-xs text-ca-muted">
+              {videoOn
+                ? "MP4, MOV, WAV, MP3, AAC, M4A… · multiple files at once · same path as Import buttons"
+                : "WAV, MP3, AAC, FLAC, M4A… · multiple files at once"}
+            </p>
+            {!videoOn && (
+              <p className="mt-2 text-xs text-ca-gold/80">
+                Studio is audio-only — switch to Audio + Video in Settings to
+                import picture.
+              </p>
+            )}
+          </>
         )}
       </div>
 
@@ -138,7 +171,6 @@ export function MediaLibrary() {
         </p>
       )}
 
-      {/* Quick path for multi-cam shows */}
       {videoOn && (
         <div className="rounded-xl border border-ca-gold/20 bg-ca-gold/5 px-4 py-3 text-sm text-zinc-300">
           <span className="font-medium text-ca-gold">Two angles + board mix?</span>{" "}
