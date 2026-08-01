@@ -69,7 +69,10 @@ interface Project {
 
 type Doc = Pick<Project, "tracks" | "markers">;
 
-const fileUrl = (mediaId: string) => `/api/admin/media/${mediaId}/file`;
+const fileUrl = (mediaId: string, library?: MediaItem[]) => {
+  const hit = library?.find((m) => m.id === mediaId);
+  return hit?.url || `/api/admin/media/${mediaId}/file`;
+};
 const durMs = (c: Pick<Clip, "srcInMs" | "srcOutMs" | "speed">) =>
   Math.max(0, Math.round((c.srcOutMs - c.srcInMs) / (c.speed || 1)));
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -438,7 +441,7 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
         el.removeAttribute("src");
       };
       el.onerror = () => resolve(null);
-      el.src = fileUrl(mediaId);
+      el.src = fileUrl(mediaId, library);
     });
 
   /**
@@ -874,7 +877,7 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
                   if (el) els.current.set(clip.id, el);
                   else els.current.delete(clip.id);
                 }}
-                src={fileUrl(clip.mediaId)}
+                src={fileUrl(clip.mediaId, library)}
                 playsInline
                 preload="auto"
                 onLoadedMetadata={(e) =>

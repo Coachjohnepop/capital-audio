@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCapability } from "@/components/capability-provider";
 import type { MediaItem, MediaMarker, Projection } from "@/lib/media-shared";
-import { formatBytes } from "@/lib/media-shared";
+import { formatBytes, mediaPlayUrl } from "@/lib/media-shared";
 import { Video360 } from "@/components/video-360";
 
 function fmtTime(t: number) {
@@ -171,7 +171,7 @@ export function MediaEditor({ id }: { id: string }) {
   }
   if (!item) return <p className="text-sm text-ca-muted">Loading…</p>;
 
-  const src = `/api/admin/media/${id}/file`;
+  const src = mediaPlayUrl(item);
   const end = trimOut ?? duration;
   const pct = (t: number) => (duration > 0 ? Math.min(100, (t / duration) * 100) : 0);
 
@@ -223,7 +223,7 @@ export function MediaEditor({ id }: { id: string }) {
         {new Date(item.uploadedAt).toLocaleString()}
       </div>
 
-      {/* Player */}
+      {/* Player — uses cloud CDN URL when available so you actually see the file */}
       <div className="relative mt-6 overflow-hidden rounded-2xl border border-ca-border bg-black">
         {item.kind === "video" ? (
           <>
@@ -232,18 +232,20 @@ export function MediaEditor({ id }: { id: string }) {
                 mediaRef.current = el;
                 setVideoEl(el);
               }}
+              key={src}
               src={src}
               className={
                 videoOn && projection === "360"
                   ? "pointer-events-none absolute h-px w-px opacity-0"
-                  : "mx-auto max-h-[60vh] w-full"
+                  : "mx-auto max-h-[70vh] w-full"
               }
               onTimeUpdate={onTimeUpdate}
               onLoadedMetadata={onLoadedMetadata}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               playsInline
-              crossOrigin="anonymous"
+              controls
+              preload="auto"
             />
             {videoOn && projection === "360" && (
               <Video360 video={videoEl} className="aspect-video w-full" />
@@ -273,22 +275,28 @@ export function MediaEditor({ id }: { id: string }) {
             )}
           </>
         ) : (
-          <div className="flex items-center justify-center bg-ca-panel p-10">
+          <div className="flex flex-col items-center justify-center gap-4 bg-ca-panel px-6 py-12">
+            <div className="font-display text-5xl text-ca-gold">♪</div>
+            <div className="font-mono text-2xl text-white">{fmtTime(current)}</div>
             <audio
               ref={mediaRef as React.RefObject<HTMLAudioElement>}
+              key={src}
               src={src}
+              controls
+              preload="auto"
+              className="w-full max-w-xl"
               onTimeUpdate={onTimeUpdate}
               onLoadedMetadata={onLoadedMetadata}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
             />
-            <div className="text-center">
-              <div className="font-display text-5xl text-ca-gold">♪</div>
-              <div className="mt-2 font-mono text-2xl text-white">{fmtTime(current)}</div>
-            </div>
           </div>
         )}
       </div>
+      <p className="mt-2 text-xs text-zinc-600">
+        Playing from {item.url ? "cloud storage" : "local file API"} · Space play/pause · I/O trim · M
+        marker
+      </p>
 
       {/* Timeline */}
       <div className="mt-4 select-none">

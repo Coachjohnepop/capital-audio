@@ -40,6 +40,16 @@ export interface MediaItem {
   /** defaults to flat; set to 360 for equirectangular footage */
   projection?: Projection;
   edit: MediaEdit;
+  /**
+   * Direct playable URL when stored in cloud (Vercel Blob CDN).
+   * Prefer this for &lt;video&gt;/&lt;audio&gt;. Local dev uses /api/admin/media/:id/file.
+   */
+  url?: string;
+}
+
+/** Best URL for a &lt;video&gt; / &lt;audio&gt; element. */
+export function mediaPlayUrl(item: Pick<MediaItem, "id" | "url">): string {
+  return item.url || `/api/admin/media/${item.id}/file`;
 }
 
 export function kindFromMime(mime: string): MediaKind | null {

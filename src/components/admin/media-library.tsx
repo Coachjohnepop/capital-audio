@@ -8,6 +8,7 @@ import {
   filesFromDataTransfer,
   importMediaFiles,
 } from "@/lib/import-media-client";
+import { MediaCardPreview } from "@/components/admin/media-preview";
 import type { MediaItem } from "@/lib/media-shared";
 import { formatBytes } from "@/lib/media-shared";
 
@@ -266,33 +267,52 @@ export function MediaLibrary() {
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {items.map((m) => (
-              <div key={m.id} className="ca-card ca-card-hover group p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest ${
-                      m.kind === "video"
-                        ? "bg-ca-gold/15 text-ca-gold"
-                        : "bg-white/10 text-white"
-                    }`}
-                  >
-                    {m.kind}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void remove(m.id)}
-                    className="text-xs text-ca-muted opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
-                    aria-label={`Delete ${m.title}`}
-                  >
-                    Delete
-                  </button>
-                </div>
-                <Link href={`/admin/media/${m.id}`} className="mt-3 block">
-                  <div className="truncate font-medium text-white transition-colors group-hover:text-ca-gold">
-                    {m.title}
-                  </div>
-                  <div className="mt-1 text-xs text-ca-muted">
-                    {formatBytes(m.size)} ·{" "}
-                    {new Date(m.uploadedAt).toLocaleString()}
+              <div
+                key={m.id}
+                className="ca-card ca-card-hover group overflow-hidden p-0"
+              >
+                <Link href={`/admin/media/${m.id}`} className="block">
+                  <MediaCardPreview item={m} />
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest ${
+                          m.kind === "video"
+                            ? "bg-ca-gold/15 text-ca-gold"
+                            : "bg-white/10 text-white"
+                        }`}
+                      >
+                        {m.kind}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void remove(m.id);
+                        }}
+                        className="text-xs text-ca-muted opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                        aria-label={`Delete ${m.title}`}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                    <div className="mt-2 truncate font-medium text-white transition-colors group-hover:text-ca-gold">
+                      {m.title}
+                    </div>
+                    <div className="mt-1 text-xs text-ca-muted">
+                      {formatBytes(m.size)}
+                      {m.duration
+                        ? ` · ${Math.floor(m.duration / 60)}:${String(
+                            Math.floor(m.duration % 60),
+                          ).padStart(2, "0")}`
+                        : ""}
+                      {" · "}
+                      {new Date(m.uploadedAt).toLocaleString()}
+                    </div>
+                    <p className="mt-2 text-[11px] text-ca-gold/80">
+                      Click to open &amp; play →
+                    </p>
                   </div>
                 </Link>
               </div>

@@ -212,8 +212,12 @@ async function getMediaCloud(id: string): Promise<MediaItem | null> {
 }
 
 function stripBlobFields(doc: MediaBlobMeta): MediaItem {
-  const { blobUrl: _u, blobPathname: _p, ...item } = doc;
-  return item;
+  const { blobUrl, blobPathname: _p, ...rest } = doc;
+  return {
+    ...rest,
+    // Expose CDN URL so players can load without following our API redirect
+    url: blobUrl || rest.url || undefined,
+  };
 }
 
 async function writeMediaMeta(item: MediaItem & Partial<MediaBlobMeta>): Promise<MediaItem> {
