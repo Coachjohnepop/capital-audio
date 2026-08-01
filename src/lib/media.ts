@@ -240,6 +240,14 @@ async function saveUploadCloud(file: File): Promise<MediaItem> {
   const kind = kindFromMime(file.type);
   if (!kind) throw new Error(`Unsupported type: ${file.type || "unknown"}`);
 
+  // Server-side put is only for small files (API body limit ~4.5MB on Vercel).
+  // Large imports must use client → Blob (see ImportMediaButton + register).
+  if (file.size > 4 * 1024 * 1024) {
+    throw new Error(
+      "File too large for server upload. Use client import (should auto-upgrade).",
+    );
+  }
+
   const id = crypto.randomBytes(8).toString("hex");
   const ext = path.extname(file.name) || (kind === "video" ? ".mp4" : ".wav");
   const pathname = filePathname(id, ext);
@@ -247,21 +255,44 @@ async function saveUploadCloud(file: File): Promise<MediaItem> {
 
   const uploaded = await blobPut(pathname, buf, file.type || undefined);
 
-  const item: MediaBlobMeta = {
+  return registerCloudMedia({
     id,
     kind,
     title: file.name.replace(/\.[^.]+$/, ""),
     filename: path.basename(pathname),
     mime: file.type,
     size: buf.length,
+    blobUrl: uploaded.url,
+    blobPathname: uploaded.pathname,
+  });
+}
+
+/** Persist library metadata after a browser → Blob direct upload. */
+export async function registerCloudMedia(input: {
+  id: string;
+  kind: "video" | "audio";
+  title: string;
+  filename: string;
+  mime: string;
+  size: number;
+  blobUrl: string;
+  blobPathname: string;
+}): Promise<MediaItem> {
+  const item: MediaBlobMeta = {
+    id: input.id,
+    kind: input.kind,
+    title: input.title,
+    filename: input.filename,
+    mime: input.mime,
+    size: input.size,
     uploadedAt: new Date().toISOString(),
     duration: null,
     projection: undefined,
     edit: { trimIn: 0, trimOut: null, markers: [] },
-    blobUrl: uploaded.url,
-    blobPathname: uploaded.pathname,
+    blobUrl: input.blobUrl,
+    blobPathname: input.blobPathname,
   };
-  await blobPutJson(metaPath(id), item);
+  await blobPutJson(metaPath(input.id), item);
   return stripBlobFields(item);
 }
 

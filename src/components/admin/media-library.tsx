@@ -41,10 +41,20 @@ export function MediaLibrary() {
     refresh();
   }, [refresh]);
 
+  // Drag-drop reuses ImportMediaButton path via a hidden helper: refresh after
+  // any drop by posting through the same client-upload logic is heavier here,
+  // so drops still call the API — large drops should use the Import buttons.
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
       setError(null);
+      // Prefer clicking Import for large video; drag-drop still tries API.
       for (const file of Array.from(files)) {
+        if (file.size > 3.5 * 1024 * 1024) {
+          setError(
+            "That file is large — use Import video / Import audio (direct cloud upload). Drag-and-drop is for smaller files only.",
+          );
+          continue;
+        }
         const form = new FormData();
         form.append("file", file);
         try {
