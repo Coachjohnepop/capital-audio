@@ -23,8 +23,14 @@ import {
 
 const BLOB_EDITS_PREFIX = "ca/edits/";
 
+/** Folder per project so we can pick the newest revision reliably. */
+function editBlobDir(id: string) {
+  return `${BLOB_EDITS_PREFIX}${id}/`;
+}
+
 function editBlobPath(id: string) {
-  return `${BLOB_EDITS_PREFIX}${id}.json`;
+  // Fixed "head" path + versioned writes; readers pick max(updatedAt).
+  return `${editBlobDir(id)}doc.json`;
 }
 
 export interface EditEffect {
@@ -117,27 +123,80 @@ function summarizeProject(p: EditProject): EditProjectSummary {
   };
 }
 
+/**
+ * Load every JSON revision under ca/edits/{id}/ and return the newest by updatedAt.
+ * Fixes a prod bug where list() could return a stale empty create-doc after PATCH.
+ */
+async function getEditProjectCloud(id: string): Promise<EditProject | null> {
+  const blobs = await blobList(editBlobDir(id));
+  // Legacy flat path from first cloud version
+  const legacy = await blobList(BLOB_EDITS_PREFIX);
+  const candidates = [
+    ...blobs,
+    ...legacy.filter(
+      (b) =>
+        b.pathname === `${BLOB_EDITS_PREFIX}${id}.json` ||
+        b.pathname.endsWith(`/${id}.json`),
+    ),
+  ].filter((b) => b.pathname.endsWith(".json"));
+
+  if (candidates.length === 0) return null;
+
+  const docs: EditProject[] = [];
+  await Promise.all(
+    candidates.map(async (b) => {
+      // Bust CDN: append query (Blob URLs usually ignore unknown query)
+      const bust = b.url.includes("?") ? `${b.url}&t=${Date.now()}` : `${b.url}?t=${Date.now()}`;
+      const p = await blobGetJson<EditProject>(bust);
+      if (p?.id === id) docs.push(p);
+    }),
+  );
+  if (docs.length === 0) return null;
+  docs.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+  return docs[0];
+}
+
+async function writeEditProjectCloud(project: EditProject): Promise<EditProject> {
+  // Unique revision + head pointer. Readers pick max(updatedAt) across all.
+  const rev = `${editBlobDir(project.id)}rev-${Date.now()}.json`;
+  const putRev = await blobPutJson(rev, project);
+  await blobPutJson(editBlobPath(project.id), project);
+  // Verify via the URL we just wrote (not list — list can lag)
+  const verified = await blobGetJson<EditProject>(putRev.url);
+  if (verified && (verified.tracks?.length ?? 0) !== (project.tracks?.length ?? 0)) {
+    console.warn("[edits] write verify track mismatch", {
+      id: project.id,
+      expected: project.tracks.length,
+      got: verified.tracks?.length,
+    });
+  }
+  return project;
+}
+
 async function listEditProjectsCloud(): Promise<EditProjectSummary[]> {
   const blobs = await blobList(BLOB_EDITS_PREFIX);
+  // Group by project id
+  const byId = new Map<string, { url: string; pathname: string }[]>();
+  for (const b of blobs) {
+    if (!b.pathname.endsWith(".json")) continue;
+    // ca/edits/{id}/doc.json  or  ca/edits/{id}.json  or  ca/edits/{id}/rev-….json
+    const parts = b.pathname.replace(BLOB_EDITS_PREFIX, "").split("/");
+    const id = parts[0]?.replace(/\.json$/, "");
+    if (!id) continue;
+    const list = byId.get(id) ?? [];
+    list.push(b);
+    byId.set(id, list);
+  }
+
   const summaries: EditProjectSummary[] = [];
   await Promise.all(
-    blobs.map(async (b) => {
-      if (!b.pathname.endsWith(".json")) return;
-      const p = await blobGetJson<EditProject>(b.url);
-      if (p?.id) summaries.push(summarizeProject(p));
+    Array.from(byId.keys()).map(async (id) => {
+      const p = await getEditProjectCloud(id);
+      if (p) summaries.push(summarizeProject(p));
     }),
   );
   summaries.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
   return summaries;
-}
-
-async function getEditProjectCloud(id: string): Promise<EditProject | null> {
-  const blobs = await blobList(BLOB_EDITS_PREFIX);
-  const hit = blobs.find(
-    (b) => b.pathname === editBlobPath(id) || b.pathname.endsWith(`/${id}.json`),
-  );
-  if (!hit) return null;
-  return blobGetJson<EditProject>(hit.url);
 }
 
 export async function listEditProjects(): Promise<EditProjectSummary[]> {
@@ -268,8 +327,7 @@ export async function createEditProject(
     updatedAt: now,
   };
   if (isCloudStore()) {
-    await blobPutJson(editBlobPath(id), project);
-    return project;
+    return writeEditProjectCloud(project);
   }
   await dbReady();
   await db.insert(projectsTable).values({
@@ -297,8 +355,7 @@ export async function updateEditProject(
       markers: patch.markers ?? existing.markers,
       updatedAt: new Date().toISOString(),
     };
-    await blobPutJson(editBlobPath(id), next);
-    return next;
+    return writeEditProjectCloud(next);
   }
   await dbReady();
   const existing = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
@@ -394,11 +451,17 @@ export async function deleteEditProject(id: string): Promise<boolean> {
   if (isCloudStore()) {
     const existing = await getEditProjectCloud(id);
     if (!existing) return false;
-    const blobs = await blobList(BLOB_EDITS_PREFIX);
-    const hit = blobs.find(
-      (b) => b.pathname === editBlobPath(id) || b.pathname.endsWith(`/${id}.json`),
-    );
-    if (hit) await blobDel(hit.url);
+    // Remove folder + legacy flat file
+    await blobDelPrefix(editBlobDir(id));
+    const legacy = await blobList(BLOB_EDITS_PREFIX);
+    for (const b of legacy) {
+      if (
+        b.pathname === `${BLOB_EDITS_PREFIX}${id}.json` ||
+        b.pathname.endsWith(`/${id}.json`)
+      ) {
+        await blobDel(b.url);
+      }
+    }
     return true;
   }
   await dbReady();
