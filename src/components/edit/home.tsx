@@ -67,8 +67,8 @@ export function EditsHome() {
         </h1>
         <p className="mt-2 max-w-xl text-sm text-ca-muted">
           {videoOn
-            ? "Cut a show together — arrange clips on a timeline, trim, split, detach audio, drop markers. Clips reference the Media Library; originals are never touched."
-            : "Arrange multi-track audio on a timeline — trim, split, fades, markers. New projects start with audio lanes only (studio is in audio-only mode)."}
+            ? "Import Cam A, Cam B, and board audio into a timeline, line them up, then cut. Clips reference the Media Library — originals are never touched."
+            : "Import multi-track audio, line stems up, then cut. New projects start with audio lanes only (studio is in audio-only mode)."}
         </p>
       </header>
 
@@ -79,15 +79,15 @@ export function EditsHome() {
           onKeyDown={(e) => {
             if (e.key === "Enter" && title.trim()) void create();
           }}
-          placeholder="New edit title — e.g. The Verge @ Goldfield — highlight reel"
+          placeholder="New timeline — e.g. The Verge @ Goldfield — highlight reel"
           className="w-80 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white outline-none focus:border-ca-gold"
         />
         <button
           onClick={create}
           disabled={creating || !title.trim()}
-          className="rounded-full bg-ca-gold px-5 py-2 text-sm font-semibold text-ca-ink disabled:opacity-40"
+          className="ca-btn ca-btn-primary disabled:opacity-40"
         >
-          {creating ? "Creating…" : "Create edit"}
+          {creating ? "Creating…" : "New timeline"}
         </button>
       </div>
 

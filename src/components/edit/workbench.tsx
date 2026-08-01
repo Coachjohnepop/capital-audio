@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { ImportMediaPair } from "@/components/admin/import-media-button";
 import type { MediaItem } from "@/lib/media-shared";
 
 interface Effect {
@@ -411,13 +412,21 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
       el.src = fileUrl(mediaId);
     });
 
-  const addToTimeline = async () => {
-    const m = mediaById.get(addPick);
-    if (!m || !project) return;
+  /**
+   * Place a library item on the timeline.
+   * - First video → magnetic V1 storyline
+   * - More videos → new free-floating angle tracks (V2, V3…) at the playhead
+   *   so Cam A / Cam B can sit on top of each other while you line them up
+   * - Audio → A1 at playhead (or magnetic A1 storyline in audio-only projects)
+   */
+  const addMediaToTimeline = async (m: MediaItem) => {
+    if (!project) return;
     let dur = mediaDurMs(m.id);
     if (!dur) dur = await probeDuration(m.id, m.kind);
     if (!dur) {
-      alert("Could not read that file's duration — open it once in the Media Library first.");
+      alert(
+        "Could not read that file's duration — try again in a second, or open it once in Media.",
+      );
       return;
     }
     const clip: Clip = {
@@ -432,19 +441,52 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
       opacity: 1,
       fadeInMs: 0,
       fadeOutMs: 0,
-      label: "",
+      label: m.title,
       effects: [],
     };
+    let newClipId = clip.id;
     updateDoc((doc) => {
       const storyline = doc.tracks[0];
-      // Video always goes on the picture storyline when present.
       if (m.kind === "video") {
-        const vTrack = doc.tracks.find((t) => t.kind === "video") ?? storyline;
-        vTrack?.clips.push(clip);
+        const videoTracks = doc.tracks.filter((t) => t.kind === "video");
+        if (videoTracks.length === 0 || (videoTracks[0].clips.length === 0 && storyline?.kind === "video")) {
+          // Empty storyline — first angle fills V1
+          const v = videoTracks[0] ?? storyline;
+          if (v && v.kind === "video") {
+            v.clips.push(clip);
+            return;
+          }
+        }
+        if (videoTracks[0] && videoTracks[0].clips.length === 0) {
+          videoTracks[0].clips.push(clip);
+          return;
+        }
+        // Additional camera angles get their own free-floating track at playhead
+        const n = videoTracks.length + 1;
+        const track: Track = {
+          id: crypto.randomUUID().replace(/-/g, "").slice(0, 16),
+          kind: "video",
+          name: `V${n}`,
+          orderIdx: doc.tracks.length,
+          muted: false,
+          locked: false,
+          volume: 1,
+          clips: [],
+        };
+        clip.startMs = Math.round(curRef.current);
+        // Mute angle tracks by default so board mix (A1) carries sound
+        clip.muted = true;
+        track.clips.push(clip);
+        // Insert after existing video tracks, before audio
+        const firstAudio = doc.tracks.findIndex((t) => t.kind === "audio");
+        if (firstAudio >= 0) doc.tracks.splice(firstAudio, 0, track);
+        else doc.tracks.push(track);
+        doc.tracks.forEach((t, i) => {
+          t.orderIdx = i;
+        });
         return;
       }
-      // Audio: append to storyline when it's an audio-only project (A1 magnetic),
-      // otherwise place at playhead on the first free-floating audio lane.
+      // Audio
       if (storyline?.kind === "audio") {
         storyline.clips.push(clip);
         return;
@@ -457,8 +499,22 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
       audio.clips.push(clip);
       audio.clips.sort((a, b) => a.startMs - b.startMs);
     });
-    setSelectedId(clip.id);
+    setSelectedId(newClipId);
     setAddPick("");
+  };
+
+  const addToTimeline = async () => {
+    const m = mediaById.get(addPick);
+    if (!m) return;
+    await addMediaToTimeline(m);
+  };
+
+  const onImported = async (item: MediaItem) => {
+    setLibrary((prev) => {
+      if (prev.some((p) => p.id === item.id)) return prev;
+      return [item, ...prev];
+    });
+    await addMediaToTimeline(item);
   };
 
   const removeClip = (clipId: string) => {
@@ -867,69 +923,101 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
         )}
       </section>
 
-      {/* Transport */}
-      <section className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={togglePlay}
-          className="rounded-full bg-white/10 px-5 py-1.5 text-sm text-white hover:bg-white/20"
-        >
-          {playing ? "Pause" : "Play"}
-        </button>
-        <span className="w-28 font-mono text-sm text-ca-gold">
-          {fmtTime(curMs)} <span className="text-zinc-500">/ {fmtTime(end)}</span>
-        </span>
-        <div className="mx-1 h-5 w-px bg-white/10" />
-        <button onClick={splitAtPlayhead} title="Split at playhead (B)" className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-200 hover:border-ca-gold">
-          ✂ Split
-        </button>
-        <button onClick={addMarker} title="Add marker (M)" className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-200 hover:border-ca-gold">
-          ◆ Marker
-        </button>
-        <button onClick={undo} title="Undo (⌘Z)" className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-200 hover:border-ca-gold">
-          ↩ Undo
-        </button>
-        <button onClick={redo} title="Redo (⇧⌘Z)" className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-200 hover:border-ca-gold">
-          ↪ Redo
-        </button>
-        <div className="mx-1 h-5 w-px bg-white/10" />
-        <select
-          value={addPick}
-          onChange={(e) => setAddPick(e.target.value)}
-          className="rounded-lg border border-white/15 bg-ca-ink px-3 py-1.5 text-sm text-white outline-none focus:border-ca-gold"
-        >
-          <option value="">— pick from media library —</option>
-          {library.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.kind === "audio" ? "♪" : "▸"} {m.title}
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={() => void addToTimeline()}
-          disabled={!addPick}
-          className="rounded-full border border-white/20 px-4 py-1.5 text-sm text-zinc-200 hover:border-ca-gold disabled:opacity-40"
-        >
-          + Add to timeline
-        </button>
-        <div className="ml-auto flex items-center gap-1 text-xs text-zinc-400">
-          <span>zoom</span>
-          <input
-            type="range"
-            min={2}
-            max={200}
-            value={pxPerSec}
-            onChange={(e) => setPxPerSec(Number(e.target.value))}
-            className="w-28 accent-[#d3a94f]"
-          />
+      {/* Import + transport (iMovie-style) */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/8 bg-ca-panel/60 px-4 py-3">
+          <ImportMediaPair onImported={onImported} />
+          <p className="text-xs text-ca-muted sm:ml-1">
+            Import Cam A, Cam B, then board audio — extra videos land as angle
+            tracks (muted); drag edges to line up with the mix.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => {
-              if (end > 0 && timelineBox.current)
-                setPxPerSec(clamp(((timelineBox.current.clientWidth - 120) * 1000) / end, 2, 200));
-            }}
-            className="rounded border border-white/15 px-2 py-0.5 hover:border-ca-gold"
+            onClick={togglePlay}
+            className="rounded-full bg-white/10 px-5 py-1.5 text-sm text-white hover:bg-white/20"
           >
-            Fit
+            {playing ? "Pause" : "Play"}
           </button>
+          <span className="w-28 font-mono text-sm text-ca-gold">
+            {fmtTime(curMs)}{" "}
+            <span className="text-zinc-500">/ {fmtTime(end)}</span>
+          </span>
+          <div className="mx-1 h-5 w-px bg-white/10" />
+          <button
+            onClick={splitAtPlayhead}
+            title="Split at playhead (B)"
+            className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-200 hover:border-ca-gold"
+          >
+            ✂ Split
+          </button>
+          <button
+            onClick={addMarker}
+            title="Add marker (M)"
+            className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-200 hover:border-ca-gold"
+          >
+            ◆ Marker
+          </button>
+          <button
+            onClick={undo}
+            title="Undo (⌘Z)"
+            className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-200 hover:border-ca-gold"
+          >
+            ↩ Undo
+          </button>
+          <button
+            onClick={redo}
+            title="Redo (⇧⌘Z)"
+            className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-200 hover:border-ca-gold"
+          >
+            ↪ Redo
+          </button>
+          <div className="mx-1 h-5 w-px bg-white/10" />
+          <select
+            value={addPick}
+            onChange={(e) => setAddPick(e.target.value)}
+            className="rounded-lg border border-white/15 bg-ca-ink px-3 py-1.5 text-sm text-white outline-none focus:border-ca-gold"
+          >
+            <option value="">— library —</option>
+            {library.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.kind === "audio" ? "♪" : "▸"} {m.title}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => void addToTimeline()}
+            disabled={!addPick}
+            className="rounded-full border border-white/20 px-4 py-1.5 text-sm text-zinc-200 hover:border-ca-gold disabled:opacity-40"
+          >
+            + Add to timeline
+          </button>
+          <div className="ml-auto flex items-center gap-1 text-xs text-zinc-400">
+            <span>zoom</span>
+            <input
+              type="range"
+              min={2}
+              max={200}
+              value={pxPerSec}
+              onChange={(e) => setPxPerSec(Number(e.target.value))}
+              className="w-28 accent-[#d3a94f]"
+            />
+            <button
+              onClick={() => {
+                if (end > 0 && timelineBox.current)
+                  setPxPerSec(
+                    clamp(
+                      ((timelineBox.current.clientWidth - 120) * 1000) / end,
+                      2,
+                      200,
+                    ),
+                  );
+              }}
+              className="rounded border border-white/15 px-2 py-0.5 hover:border-ca-gold"
+            >
+              Fit
+            </button>
+          </div>
         </div>
       </section>
 

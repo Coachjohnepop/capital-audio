@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useCapability } from "@/components/capability-provider";
+import { ImportMediaPair } from "@/components/admin/import-media-button";
 import type { MediaItem } from "@/lib/media-shared";
 import { formatBytes } from "@/lib/media-shared";
 
@@ -10,31 +11,30 @@ export function MediaLibrary() {
   const { videoOn } = useCapability();
   const [items, setItems] = useState<MediaItem[] | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
     fetch("/api/admin/media")
       .then((res) => res.json())
-      .then(setItems);
+      .then(setItems)
+      .catch(() => setError("Could not load media library"));
   }, []);
 
   useEffect(() => {
-    fetch("/api/admin/media")
-      .then((res) => res.json())
-      .then(setItems);
-  }, []);
+    refresh();
+  }, [refresh]);
 
-  const upload = useCallback(
+  const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
       setError(null);
       for (const file of Array.from(files)) {
-        setUploading(file.name);
         const form = new FormData();
         form.append("file", file);
         try {
-          const res = await fetch("/api/admin/media", { method: "POST", body: form });
+          const res = await fetch("/api/admin/media", {
+            method: "POST",
+            body: form,
+          });
           if (!res.ok) {
             const body = await res.json().catch(() => null);
             throw new Error(body?.error ?? `Upload failed (${res.status})`);
@@ -43,10 +43,9 @@ export function MediaLibrary() {
           setError(err instanceof Error ? err.message : "Upload failed");
         }
       }
-      setUploading(null);
       refresh();
     },
-    [refresh]
+    [refresh],
   );
 
   const remove = useCallback(
@@ -54,11 +53,25 @@ export function MediaLibrary() {
       await fetch(`/api/admin/media/${id}`, { method: "DELETE" });
       refresh();
     },
-    [refresh]
+    [refresh],
   );
 
   return (
-    <div className="mt-8">
+    <div className="mt-8 space-y-6">
+      {/* iMovie-style import strip */}
+      <div className="ca-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-white">Import media</p>
+          <p className="mt-1 text-xs leading-relaxed text-ca-muted">
+            {videoOn
+              ? "Bring in Cam A, Cam B, and board audio as separate files — then open Multi-angle sync to line them up, or Timeline to cut."
+              : "Bring in multi-track bounces and stems, then open Timeline to arrange."}
+          </p>
+        </div>
+        <ImportMediaPair onBatchDone={() => refresh()} />
+      </div>
+
+      {/* Drop zone */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -68,68 +81,65 @@ export function MediaLibrary() {
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
-          if (e.dataTransfer.files.length) upload(e.dataTransfer.files);
+          if (e.dataTransfer.files.length) void uploadFiles(e.dataTransfer.files);
         }}
-        className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-10 text-center transition-colors ${
+        className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
           dragOver
             ? "border-ca-gold bg-ca-gold/5"
-            : "border-white/12 bg-ca-panel/80"
+            : "border-white/12 bg-ca-panel/50"
         }`}
       >
         <p className="text-sm text-white">
-          {uploading
-            ? `Uploading ${uploading}…`
-            : videoOn
-              ? "Drag & drop video or audio files"
-              : "Drag & drop multi-track audio files"}
+          Or drag & drop files here
         </p>
         <p className="mt-1 text-xs text-ca-muted">
-          {videoOn ? "MP4, MOV, WAV, MP3, AAC…" : "WAV, MP3, AAC, FLAC…"}
-          {!videoOn && (
-            <span className="block mt-1 text-ca-gold/80">
-              Studio is in audio-only mode — switch to Audio + Video in Settings to
-              upload picture.
-            </span>
-          )}
+          {videoOn
+            ? "MP4, MOV, WAV, MP3, AAC… · multiple files at once"
+            : "WAV, MP3, AAC, FLAC… · multiple files at once"}
         </p>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={!!uploading}
-          className="ca-btn ca-btn-primary mt-4 disabled:opacity-50"
-        >
-          Choose files
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept={videoOn ? "video/*,audio/*" : "audio/*"}
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files?.length) upload(e.target.files);
-            e.target.value = "";
-          }}
-        />
+        {!videoOn && (
+          <p className="mt-2 text-xs text-ca-gold/80">
+            Studio is audio-only — switch to Audio + Video in Settings to import
+            picture.
+          </p>
+        )}
       </div>
 
       {error && (
-        <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+        <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
           {error}
         </p>
       )}
 
+      {/* Quick path for multi-cam shows */}
+      {videoOn && (
+        <div className="rounded-xl border border-ca-gold/20 bg-ca-gold/5 px-4 py-3 text-sm text-zinc-300">
+          <span className="font-medium text-ca-gold">Two angles + board mix?</span>{" "}
+          Import all three separately →{" "}
+          <Link href="/admin/sync-editor" className="text-ca-gold underline">
+            Multi-angle sync
+          </Link>{" "}
+          to line them up →{" "}
+          <Link href="/admin/edits" className="text-ca-gold underline">
+            Timeline
+          </Link>{" "}
+          to cut.
+        </div>
+      )}
+
       {items === null ? (
-        <p className="mt-8 text-sm text-ca-muted">Loading…</p>
+        <p className="text-sm text-ca-muted">Loading library…</p>
       ) : items.length === 0 ? (
-        <p className="mt-8 text-sm text-ca-muted">No media yet.</p>
+        <div className="rounded-2xl border border-dashed border-white/12 px-6 py-12 text-center">
+          <p className="text-sm text-ca-muted">
+            Library is empty. Import Cam A, Cam B, and your board mix to get
+            started.
+          </p>
+        </div>
       ) : (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((m) => (
-            <div
-              key={m.id}
-              className="ca-card ca-card-hover group p-5"
-            >
+            <div key={m.id} className="ca-card ca-card-hover group p-5">
               <div className="flex items-start justify-between gap-3">
                 <span
                   className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest ${
@@ -142,7 +152,7 @@ export function MediaLibrary() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => remove(m.id)}
+                  onClick={() => void remove(m.id)}
                   className="text-xs text-ca-muted opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
                   aria-label={`Delete ${m.title}`}
                 >
@@ -154,11 +164,15 @@ export function MediaLibrary() {
                   {m.title}
                 </div>
                 <div className="mt-1 text-xs text-ca-muted">
-                  {formatBytes(m.size)} · {new Date(m.uploadedAt).toLocaleString()}
+                  {formatBytes(m.size)} ·{" "}
+                  {new Date(m.uploadedAt).toLocaleString()}
                 </div>
                 <div className="mt-3 text-xs text-ca-muted">
-                  {m.edit.markers.length} marker{m.edit.markers.length === 1 ? "" : "s"}
-                  {m.edit.trimIn > 0 || m.edit.trimOut != null ? " · trimmed" : ""}
+                  {m.edit.markers.length} marker
+                  {m.edit.markers.length === 1 ? "" : "s"}
+                  {m.edit.trimIn > 0 || m.edit.trimOut != null
+                    ? " · trimmed"
+                    : ""}
                 </div>
               </Link>
             </div>
