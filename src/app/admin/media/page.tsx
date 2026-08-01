@@ -9,8 +9,8 @@ export default function MediaLibraryPage() {
         Media Library
       </h1>
       <p className="mt-1 text-sm text-ca-muted">
-        Import video and audio like iMovie — each file stays separate. Open a
-        clip to trim and mark, or send angles + board mix to Sync / Timeline.
+        Drag files anywhere on this page or use Import. Masters live in cloud
+        storage; open a clip to trim/mark, then Timeline or Sync to edit.
       </p>
       <MediaLibrary />
     </div>

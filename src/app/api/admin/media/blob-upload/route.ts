@@ -3,47 +3,29 @@ import { NextResponse } from "next/server";
 
 /**
  * Token exchange for browser → Vercel Blob uploads.
- * Files larger than ~4.5MB cannot go through the serverless function body
- * (HTTP 413) — they must upload directly to Blob from the client.
+ * Do not restrict content-types tightly — Finder .mov/.m4a often send empty
+ * or odd MIME types; pathname extension is enough.
  */
 export async function POST(request: Request): Promise<NextResponse> {
-  const body = (await request.json()) as HandleUploadBody;
+  let body: HandleUploadBody;
+  try {
+    body = (await request.json()) as HandleUploadBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   try {
     const json = await handleUpload({
       body,
       request,
       onBeforeGenerateToken: async (pathname) => {
-        // Only allow studio media paths
         if (!pathname.startsWith("ca/media/")) {
-          throw new Error("Invalid upload path");
+          throw new Error("Invalid upload path — must be under ca/media/");
         }
         return {
-          // Broad list — browsers report inconsistent types for .mov/.m4a
-          allowedContentTypes: [
-            "video/mp4",
-            "video/quicktime",
-            "video/webm",
-            "video/x-msvideo",
-            "video/x-matroska",
-            "video/mpeg",
-            "video/x-m4v",
-            "audio/mpeg",
-            "audio/mp4",
-            "audio/wav",
-            "audio/x-wav",
-            "audio/wave",
-            "audio/aac",
-            "audio/flac",
-            "audio/ogg",
-            "audio/webm",
-            "audio/x-m4a",
-            "audio/m4a",
-            "application/octet-stream",
-            "application/mp4",
-          ],
           addRandomSuffix: false,
           allowOverwrite: true,
+          // No allowedContentTypes — accept any media Finder throws at us
           maximumSizeInBytes: 5 * 1024 * 1024 * 1024, // 5 GB
         };
       },

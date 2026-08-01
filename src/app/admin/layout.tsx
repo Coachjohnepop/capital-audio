@@ -7,12 +7,16 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/**
+ * Full-bleed studio chrome — no max-w-6xl. Ultrawide monitors get the full
+ * width for timeline / multi-track editing.
+ */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-ca-ink">
       <div className="pointer-events-none fixed inset-0 ca-glow-soft opacity-80" />
       <header className="ca-shell-header relative">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10">
           <div className="flex h-14 items-center justify-between gap-4 border-b border-white/5">
             <BrandMark
               href="/admin"
@@ -29,7 +33,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
       </header>
-      <main className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+      <main className="relative w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10">
         {children}
       </main>
     </div>
