@@ -15,7 +15,7 @@ You never run video without audio. The toggle is saved in this browser until we 
 - **Dashboard** (`/admin`) — file counts, storage used, recent uploads, mode toggle.
 - **Media Library** (`/admin/media`) — upload and manage files (audio-only accept when mode is Audio only).
 - **Multi-Angle Sync** (`/admin/sync-editor`) — line up several cameras against one master audio track (**Audio + Video mode only**).
-- **Edits** (`/admin/edits`) — cut a show together on a timeline: arrange, trim, split, detach audio, markers. New audio-only edits start with A1/A2 tracks.
+- **Timeline** (`/admin/edits`) — cut a show together: arrange, trim, split, detach audio, markers. New audio-only projects start with A1/A2 tracks. From the public site, open **Studio → Timeline**.
 - **Settings** (`/admin/settings`) — explain studio modes.
 - **Client portal** (`/portal`) — what customers see for projects, bookings, and milestones.
 
@@ -49,10 +49,10 @@ Line up several camera angles against one master audio track (the board mix).
 6. **Audition** on an angle lets you hear that camera's own sound (master goes quiet) — match a drum hit or a clap by ear, then switch back.
 7. Click **Save offsets**. Offsets live with the project; the files themselves are never changed.
 
-## Edits (the timeline editor)
+## Timeline (Studio)
 Cut a show together, iMovie-style. Nothing here ever changes the files — a timeline is a list of pointers into the Media Library, so cut freely.
 
-1. Open **Edits**, type a title, click **Create edit**.
+1. Open **Studio → Timeline** (or **Timeline** in the studio nav), type a title, click **Create**.
 2. Pick a file from the dropdown and click **+ Add to timeline**. Video lands at the end of the top track (the storyline); audio lands at the playhead on an audio track.
 3. **Play / pause** — button or spacebar. Click or drag the ruler to scrub.
 4. **Arrange** — drag a clip left or right. The storyline is magnetic: clips always butt together, everything after slides to fit.

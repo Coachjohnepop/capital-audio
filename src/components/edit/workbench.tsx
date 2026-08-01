@@ -743,7 +743,7 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
       <div className="space-y-4">
         <p className="text-red-300">{loadError}</p>
         <Link href="/admin/edits" className="text-ca-gold underline">
-          Back to edits
+          Back to timeline
         </Link>
       </div>
     );
@@ -778,7 +778,7 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/admin/edits" className="text-xs uppercase tracking-[0.2em] text-ca-gold">
-            ← Edits
+            ← Timeline
           </Link>
           <input
             value={project.title}

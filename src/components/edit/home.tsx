@@ -62,11 +62,13 @@ export function EditsHome() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="font-display text-3xl font-semibold text-white">Edits</h1>
+        <h1 className="font-display text-3xl font-semibold text-white">
+          Timeline
+        </h1>
         <p className="mt-2 max-w-xl text-sm text-ca-muted">
           {videoOn
             ? "Cut a show together — arrange clips on a timeline, trim, split, detach audio, drop markers. Clips reference the Media Library; originals are never touched."
-            : "Arrange multi-track audio on a timeline — trim, split, fades, markers. New edits start with audio lanes only (studio is in audio-only mode)."}
+            : "Arrange multi-track audio on a timeline — trim, split, fades, markers. New projects start with audio lanes only (studio is in audio-only mode)."}
         </p>
       </header>
 
@@ -92,7 +94,9 @@ export function EditsHome() {
       {projects === null ? (
         <p className="text-ca-muted">Loading…</p>
       ) : projects.length === 0 ? (
-        <p className="text-sm text-ca-muted">No edits yet — create the first one above.</p>
+        <p className="text-sm text-ca-muted">
+          No timelines yet — create the first one above.
+        </p>
       ) : (
         <ul className="space-y-3">
           {projects.map((p) => (

@@ -15,7 +15,7 @@ export function AdminNav() {
     ...(videoOn
       ? [{ href: "/admin/sync-editor", label: "Sync" }]
       : []),
-    { href: "/admin/edits", label: "Edits" },
+    { href: "/admin/edits", label: "Timeline" },
     { href: "/admin/settings", label: "Settings" },
   ];
 
