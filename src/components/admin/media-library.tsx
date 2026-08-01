@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useCapability } from "@/components/capability-provider";
 import { ImportMediaPair } from "@/components/admin/import-media-button";
 import {
@@ -18,6 +18,7 @@ export function MediaLibrary() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [dropBusy, setDropBusy] = useState(false);
+  const uploadRef = useRef<(files: File[]) => Promise<void>>(async () => {});
 
   const refresh = useCallback(async () => {
     try {
@@ -32,7 +33,6 @@ export function MediaLibrary() {
         throw new Error("Unexpected media library response");
       }
       setItems(body);
-      setError(null);
     } catch (err) {
       setItems((prev) => prev ?? []);
       setError(
@@ -45,28 +45,15 @@ export function MediaLibrary() {
     void refresh();
   }, [refresh]);
 
-  // Prevent the browser from opening the file when dropped outside the zone
-  useEffect(() => {
-    const block = (e: DragEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener("dragover", block);
-    window.addEventListener("drop", block);
-    return () => {
-      window.removeEventListener("dragover", block);
-      window.removeEventListener("drop", block);
-    };
-  }, []);
-
   const uploadFiles = useCallback(
-    async (raw: FileList | File[]) => {
-      const list = Array.from(raw).filter((f) => f && f.size > 0);
+    async (list: File[]) => {
       if (!list.length) {
         setError(
-          "No files in that drop. Try the Import video / Import audio buttons, or drag from Finder again.",
+          "Drop didn’t include a readable file. From Finder, drag the file icon (not a preview). Or click Import video / Import audio — those always work.",
         );
         return;
       }
+
       setError(null);
       setStatus(null);
       setDropBusy(true);
@@ -74,9 +61,7 @@ export function MediaLibrary() {
         const { done, errors } = await importMediaFiles(list, {
           onProgress: setStatus,
         });
-        if (errors.length) {
-          setError(errors.join(" · "));
-        }
+        if (errors.length) setError(errors.join(" · "));
         if (done.length) {
           setStatus(
             `Imported ${done.length} file${done.length === 1 ? "" : "s"}`,
@@ -96,12 +81,71 @@ export function MediaLibrary() {
         setError(err instanceof Error ? err.message : "Upload failed");
       } finally {
         setDropBusy(false);
-        // keep status briefly
-        setTimeout(() => setStatus(null), 4000);
+        setTimeout(() => setStatus(null), 5000);
       }
     },
     [refresh],
   );
+
+  uploadRef.current = uploadFiles;
+
+  /**
+   * Single window-level drop pipeline so Finder drops always hit our handler
+   * (and the browser doesn’t “open” the file instead).
+   */
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+      // Only highlight when dragging files
+      if (e.dataTransfer?.types) {
+        const types = Array.from(e.dataTransfer.types);
+        if (types.includes("Files") || types.includes("application/x-moz-file")) {
+          setDragOver(true);
+        }
+      }
+    };
+
+    const onDragLeave = (e: DragEvent) => {
+      if (e.relatedTarget === null) setDragOver(false);
+    };
+
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragOver(false);
+
+      // Snapshot files NOW — dataTransfer is invalid after this handler returns
+      const files = filesFromDataTransfer(e.dataTransfer);
+      if (files.length === 0) {
+        const types = e.dataTransfer
+          ? Array.from(e.dataTransfer.types || [])
+          : [];
+        // Ignore non-file drops (e.g. dragging text/links inside the page)
+        if (
+          !types.includes("Files") &&
+          !types.includes("application/x-moz-file")
+        ) {
+          return;
+        }
+        setError(
+          "Finder drop had no file data. Tips: (1) drag the file from a normal Finder window, not Photos/Music, (2) if it’s in iCloud, wait until fully downloaded, (3) or click Import video / Import audio.",
+        );
+        return;
+      }
+
+      void uploadRef.current(files);
+    };
+
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop, true); // capture so we always get it
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop, true);
+    };
+  }, []);
 
   const remove = useCallback(
     async (id: string) => {
@@ -112,52 +156,25 @@ export function MediaLibrary() {
   );
 
   return (
-    <div
-      className="space-y-6"
-      onDragEnter={(e) => {
-        e.preventDefault();
-        setDragOver(true);
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
-        setDragOver(true);
-      }}
-      onDragLeave={(e) => {
-        // only clear when leaving the whole panel
-        if (e.currentTarget === e.target) setDragOver(false);
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setDragOver(false);
-        const files = filesFromDataTransfer(e.dataTransfer);
-        void uploadFiles(files);
-      }}
-    >
+    <div className="space-y-6">
       <div className="ca-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-medium text-white">Import media</p>
           <p className="mt-1 text-xs leading-relaxed text-ca-muted">
-            Drag files anywhere on this page, or use the buttons. Large masters
-            upload straight to cloud storage — keep the tab open until progress
-            finishes.
+            <strong className="text-zinc-300">Yes — drag from Finder</strong>{" "}
+            onto this page, or use the buttons. Buttons are the most reliable
+            for multi‑GB masters. Keep the tab open until progress finishes.
           </p>
         </div>
-        <ImportMediaPair
-          onBatchDone={() => {
-            void refresh();
-          }}
-        />
+        <ImportMediaPair onBatchDone={() => void refresh()} />
       </div>
 
-      {/* Status / drop surface */}
       <div
         className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-14 text-center transition-colors ${
           dropBusy
             ? "border-ca-gold bg-ca-gold/10"
             : dragOver
-              ? "border-ca-gold bg-ca-gold/10 ring-2 ring-ca-gold/30"
+              ? "border-ca-gold bg-ca-gold/10 ring-2 ring-ca-gold/40"
               : "border-white/12 bg-ca-panel/50"
         }`}
       >
@@ -166,30 +183,39 @@ export function MediaLibrary() {
             <p className="text-base font-medium text-ca-gold">
               {status ?? "Importing…"}
             </p>
-            <p className="mt-2 max-w-md text-xs text-ca-muted">
-              Uploading to Vercel Blob. Do not close this tab. Multi-GB files can
-              take several minutes.
+            <p className="mt-2 max-w-lg text-xs text-ca-muted">
+              Uploading to cloud storage. Do not close this tab.
             </p>
           </>
         ) : dragOver ? (
-          <p className="text-lg font-medium text-ca-gold">
-            Drop video or audio to import
-          </p>
+          <>
+            <p className="text-lg font-semibold text-ca-gold">
+              Drop to import into the library
+            </p>
+            <p className="mt-1 text-xs text-ca-muted">
+              Release the mouse — upload starts immediately
+            </p>
+          </>
         ) : (
           <>
             <p className="text-sm text-white">
-              Drag & drop video or audio anywhere here
+              Drag from <span className="text-ca-gold">Finder</span> onto this
+              page
             </p>
-            <p className="mt-1 text-xs text-ca-muted">
+            <p className="mt-2 max-w-lg text-xs leading-relaxed text-ca-muted">
+              Open a Finder window → grab the file icon → drop here (or anywhere
+              on Media). Works for video and audio. If drag misbehaves, use{" "}
+              <span className="text-zinc-300">Import video</span> /{" "}
+              <span className="text-zinc-300">Import audio</span> instead.
+            </p>
+            <p className="mt-3 text-[11px] text-zinc-600">
               {videoOn
-                ? "MP4, MOV, WAV, MP3, M4A, AAC… · multiple files · same path as Import buttons"
-                : "WAV, MP3, M4A, AAC… · multiple files"}
+                ? "MP4 · MOV · WAV · MP3 · M4A · AAC"
+                : "WAV · MP3 · M4A · AAC · FLAC"}
             </p>
             {!videoOn && (
               <p className="mt-2 text-xs text-ca-gold/80">
-                Studio is audio-only — switch to{" "}
-                <strong className="text-ca-gold">A + V</strong> (top right) to
-                import video.
+                Switch top-right to <strong>A + V</strong> to import video.
               </p>
             )}
           </>
@@ -210,12 +236,11 @@ export function MediaLibrary() {
 
       {videoOn && (
         <div className="rounded-xl border border-ca-gold/20 bg-ca-gold/5 px-4 py-3 text-sm text-zinc-300">
-          <span className="font-medium text-ca-gold">Tip:</span> After import,
-          open{" "}
+          <span className="font-medium text-ca-gold">Next:</span> open{" "}
           <Link href="/admin/edits" className="text-ca-gold underline">
             Timeline
           </Link>{" "}
-          and import feeds as parallel tracks — or use{" "}
+          to stack feeds, or{" "}
           <Link href="/admin/sync-editor" className="text-ca-gold underline">
             Sync
           </Link>{" "}
@@ -228,14 +253,16 @@ export function MediaLibrary() {
       ) : items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/12 px-6 py-12 text-center">
           <p className="text-sm text-ca-muted">
-            Library is empty. Drop files above or use Import video / Import
-            audio.
+            Library is empty. Import video and audio to get started.
           </p>
         </div>
       ) : (
         <div>
           <p className="mb-3 text-xs uppercase tracking-wider text-zinc-500">
             {items.length} file{items.length === 1 ? "" : "s"} in library
+            <span className="ml-2 normal-case tracking-normal text-zinc-600">
+              (already in cloud — safe across logins)
+            </span>
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {items.map((m) => (
@@ -266,13 +293,6 @@ export function MediaLibrary() {
                   <div className="mt-1 text-xs text-ca-muted">
                     {formatBytes(m.size)} ·{" "}
                     {new Date(m.uploadedAt).toLocaleString()}
-                  </div>
-                  <div className="mt-3 text-xs text-ca-muted">
-                    {m.edit.markers.length} marker
-                    {m.edit.markers.length === 1 ? "" : "s"}
-                    {m.edit.trimIn > 0 || m.edit.trimOut != null
-                      ? " · trimmed"
-                      : ""}
                   </div>
                 </Link>
               </div>

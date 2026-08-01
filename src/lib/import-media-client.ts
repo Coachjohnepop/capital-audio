@@ -1,6 +1,6 @@
 /**
  * Browser-side media import — shared by Import buttons and drag-and-drop.
- * Always uses direct Blob upload on hosted deploys (avoids 413).
+ * Hosted deploys always use direct Vercel Blob upload (avoids HTTP 413).
  */
 
 import { upload } from "@vercel/blob/client";
@@ -22,20 +22,41 @@ function isHosted(): boolean {
   return host !== "localhost" && host !== "127.0.0.1";
 }
 
-/** Collect files from a drop / file input (handles empty FileList edge cases). */
-export function filesFromDataTransfer(dt: DataTransfer): File[] {
-  if (dt.files && dt.files.length > 0) {
-    return Array.from(dt.files);
-  }
+/**
+ * Snapshot files from a drop event IMMEDIATELY (sync).
+ * dataTransfer is only valid during the drop handler.
+ */
+export function filesFromDataTransfer(dt: DataTransfer | null): File[] {
+  if (!dt) return [];
+
   const out: File[] = [];
-  if (dt.items) {
-    for (const item of Array.from(dt.items)) {
+  const seen = new Set<string>();
+
+  const push = (f: File | null) => {
+    if (!f) return;
+    // Key by name+size+lastModified to de-dupe files vs items
+    const key = `${f.name}:${f.size}:${f.lastModified}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(f);
+  };
+
+  // Prefer items first (more reliable on some Chromium + macOS combos)
+  if (dt.items && dt.items.length > 0) {
+    for (let i = 0; i < dt.items.length; i++) {
+      const item = dt.items[i];
       if (item.kind === "file") {
-        const f = item.getAsFile();
-        if (f && f.size > 0) out.push(f);
+        push(item.getAsFile());
       }
     }
   }
+
+  if (dt.files && dt.files.length > 0) {
+    for (let i = 0; i < dt.files.length; i++) {
+      push(dt.files[i]);
+    }
+  }
+
   return out;
 }
 
@@ -44,15 +65,19 @@ export async function importOneMediaFile(
   file: File,
   onProgress?: (label: string) => void,
 ): Promise<MediaItem> {
+  if (!file.size) {
+    throw new Error(
+      `${file.name} is 0 bytes (still downloading from iCloud?). Wait until the file is fully local, then try again.`,
+    );
+  }
+
   const kind = kindFromFile(file);
   if (!kind) {
     throw new Error(
-      `Unsupported type: ${file.type || "unknown"} (${file.name}). Try .mp4, .mov, .wav, .mp3, .m4a`,
+      `Unsupported type: ${file.type || "unknown"} (${file.name}). Use .mp4, .mov, .wav, .mp3, .m4a`,
     );
   }
   const mime = mimeFromFile(file);
-
-  // Hosted (Vercel): always direct-to-Blob. Local: FormData for small, Blob if CA_CLOUD.
   const useClientUpload = isHosted() || file.size > 3.5 * 1024 * 1024;
 
   if (useClientUpload) {
@@ -62,7 +87,6 @@ export async function importOneMediaFile(
       : kind === "video"
         ? ".mp4"
         : ".wav";
-    // Extension in path helps Blob infer type when browser mime is empty
     const pathname = `ca/media/${id}/file${ext.toLowerCase()}`;
 
     onProgress?.(`Uploading ${file.name}…`);
@@ -71,12 +95,12 @@ export async function importOneMediaFile(
       const blob = await upload(pathname, file, {
         access: "public",
         handleUploadUrl: "/api/admin/media/blob-upload",
-        // Always multipart for media masters — more reliable for large files
         multipart: true,
         contentType: mime,
         onUploadProgress: (p) => {
-          const pct = Math.round(p.percentage);
-          onProgress?.(`Uploading ${file.name}… ${pct}%`);
+          onProgress?.(
+            `Uploading ${file.name}… ${Math.round(p.percentage)}%`,
+          );
         },
       });
 
@@ -102,7 +126,6 @@ export async function importOneMediaFile(
       return body as MediaItem;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Surface Blob errors clearly
       throw new Error(msg.replace(/^Vercel Blob:\s*/i, "Upload: "));
     }
   }
@@ -128,13 +151,17 @@ export async function importMediaFiles(
     onItem?: (item: MediaItem) => void | Promise<void>;
   },
 ): Promise<{ done: MediaItem[]; errors: string[] }> {
-  const list = Array.from(files).filter((f) => f && f.size > 0);
+  const list = Array.from(files);
   const done: MediaItem[] = [];
   const errors: string[] = [];
 
   if (list.length === 0) {
-    errors.push("No files found in that drop (empty or unsupported).");
-    return { done, errors };
+    return {
+      done,
+      errors: [
+        "No files found in that drop. Drag from Finder (file icon), not Photos/Music. Or use Import video / Import audio.",
+      ],
+    };
   }
 
   for (let i = 0; i < list.length; i++) {
