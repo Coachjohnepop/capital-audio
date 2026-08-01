@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ImportMediaPair } from "@/components/admin/import-media-button";
+import { getMediaDragPayload, isMediaDrag } from "@/lib/media-dnd";
 import type { MediaItem } from "@/lib/media-shared";
 
 interface Effect {
@@ -835,8 +836,36 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
     t.clips.map((c) => ({ clip: c, track: t, trackIdx: ti }))
   );
 
+  const onLibraryDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    const payload = getMediaDragPayload(e.dataTransfer);
+    if (!payload?.mediaId) return;
+    let m = mediaById.get(payload.mediaId);
+    if (!m) {
+      // Refresh library once if needed
+      const res = await fetch("/api/admin/media");
+      if (res.ok) {
+        const list = (await res.json()) as MediaItem[];
+        setLibrary(list);
+        m = list.find((x) => x.id === payload.mediaId);
+      }
+    }
+    if (m) await addMediaToTimeline(m);
+  };
+
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6"
+      onDragOver={(e) => {
+        if (isMediaDrag(e.dataTransfer)) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }
+      }}
+      onDrop={(e) => {
+        if (isMediaDrag(e.dataTransfer)) void onLibraryDrop(e);
+      }}
+    >
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/admin/edits" className="text-xs uppercase tracking-[0.2em] text-ca-gold">
@@ -967,11 +996,13 @@ export function EditWorkbench({ projectId }: { projectId: string }) {
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/8 bg-ca-panel/60 px-4 py-3">
           <ImportMediaPair onImported={onImported} />
-          <p className="max-w-md text-xs leading-relaxed text-ca-muted sm:ml-1">
-            Each import = one feed track (like a GarageBand instrument). Camera
-            mics start muted — keep board mix hot. Drag regions to line up; set{" "}
-            <span className="text-ca-gold">Program</span> to choose which camera
-            is on the monitor.
+          <p className="max-w-lg text-xs leading-relaxed text-ca-muted sm:ml-1">
+            Each import = one feed. Or drag a card from{" "}
+            <Link href="/admin/media" className="text-ca-gold underline">
+              Media Library
+            </Link>{" "}
+            onto this page. Camera mics start muted — keep board hot.{" "}
+            <span className="text-ca-gold">P</span> = program camera.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

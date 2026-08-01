@@ -4,15 +4,19 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCapability } from "@/components/capability-provider";
 import { ImportMediaPair } from "@/components/admin/import-media-button";
-import { importMediaFiles } from "@/lib/import-media-client";
+import {
+  filesFromDataTransfer,
+  importMediaFiles,
+} from "@/lib/import-media-client";
+import { setMediaDragData } from "@/lib/media-dnd";
 import { MediaCardPreview } from "@/components/admin/media-preview";
 import type { MediaItem } from "@/lib/media-shared";
 import { formatBytes } from "@/lib/media-shared";
 
 /**
- * Drop zone uses a real &lt;input type="file"&gt; overlay.
- * On macOS, Finder drops onto a file input are far more reliable than
- * parsing dataTransfer in JS (which often yields an empty FileList).
+ * Import from Finder (drop anywhere on this page / zone / buttons)
+ * + drag library clips out to Timeline.
+ * Existing cloud files already have the right path — no re-upload needed.
  */
 export function MediaLibrary() {
   const { videoOn } = useCapability();
@@ -22,6 +26,7 @@ export function MediaLibrary() {
   const [status, setStatus] = useState<string | null>(null);
   const [dropBusy, setDropBusy] = useState(false);
   const dropInputRef = useRef<HTMLInputElement>(null);
+  const uploadRef = useRef<(files: File[]) => Promise<void>>(async () => {});
 
   const refresh = useCallback(async () => {
     try {
@@ -52,7 +57,7 @@ export function MediaLibrary() {
     async (list: File[]) => {
       if (!list.length) {
         setError(
-          "No files received. Use Import video / Import audio, or drop onto the dashed box (not the browser chrome).",
+          "No files received. Drop onto the dashed box or use Import video / Import audio.",
         );
         return;
       }
@@ -85,12 +90,62 @@ export function MediaLibrary() {
       } finally {
         setDropBusy(false);
         setTimeout(() => setStatus(null), 5000);
-        // reset input so the same file can be dropped again
         if (dropInputRef.current) dropInputRef.current.value = "";
       }
     },
     [refresh],
   );
+
+  uploadRef.current = uploadFiles;
+
+  // Full-page Finder import (capture phase) — works even over the card grid
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer) return;
+      const types = Array.from(e.dataTransfer.types);
+      // Don't steal drags of library cards (our custom mime)
+      if (types.includes("application/x-capital-audio-media")) return;
+      if (!types.includes("Files") && !types.includes("application/x-moz-file")) {
+        return;
+      }
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setDragOver(true);
+    };
+
+    const onDrop = (e: DragEvent) => {
+      if (!e.dataTransfer) return;
+      const types = Array.from(e.dataTransfer.types);
+      if (types.includes("application/x-capital-audio-media")) return;
+      if (!types.includes("Files") && !types.includes("application/x-moz-file")) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      setDragOver(false);
+      const files = filesFromDataTransfer(e.dataTransfer);
+      if (files.length) {
+        void uploadRef.current(files);
+      } else {
+        setError(
+          "Finder drop had no file data. Drop on the dashed box, or use Import video / Import audio.",
+        );
+      }
+    };
+
+    const onDragLeave = (e: DragEvent) => {
+      if (e.relatedTarget === null) setDragOver(false);
+    };
+
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop, true);
+    window.addEventListener("dragleave", onDragLeave);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop, true);
+      window.removeEventListener("dragleave", onDragLeave);
+    };
+  }, []);
 
   const remove = useCallback(
     async (id: string) => {
@@ -110,46 +165,23 @@ export function MediaLibrary() {
         <div>
           <p className="text-sm font-medium text-white">Import media</p>
           <p className="mt-1 text-xs leading-relaxed text-ca-muted">
-            Use the buttons or drop onto the zone below. Audio cards have a{" "}
-            <span className="text-ca-gold">play</span> control so you can listen
-            like in Finder.
+            Drop from Finder anywhere on this page, or use Import. Files already
+            in the library are on the cloud path —{" "}
+            <strong className="text-zinc-300">no re-upload needed</strong>.
+            Drag a card to Timeline to add it as a feed.
           </p>
         </div>
         <ImportMediaPair onBatchDone={() => void refresh()} />
       </div>
 
-      {/*
-        Native file input covers the drop zone.
-        Finder → drop on input fires onChange with a real FileList (macOS-friendly).
-      */}
       <label
-        className={`relative flex min-h-[200px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-14 text-center transition-colors ${
+        className={`relative flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
           dropBusy
             ? "border-ca-gold bg-ca-gold/10"
             : dragOver
               ? "border-ca-gold bg-ca-gold/10 ring-2 ring-ca-gold/40"
               : "border-white/12 bg-ca-panel/50 hover:border-white/25"
         }`}
-        onDragEnter={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          // Backup path if the input doesn't receive the drop
-          e.preventDefault();
-          e.stopPropagation();
-          setDragOver(false);
-          const files = e.dataTransfer?.files
-            ? Array.from(e.dataTransfer.files)
-            : [];
-          if (files.length) void uploadFiles(files);
-        }}
       >
         <input
           ref={dropInputRef}
@@ -162,43 +194,27 @@ export function MediaLibrary() {
             const files = e.target.files ? Array.from(e.target.files) : [];
             if (files.length) void uploadFiles(files);
           }}
-          onDragEnter={() => setDragOver(true)}
-          onDragLeave={() => setDragOver(false)}
         />
-
         {dropBusy ? (
           <>
-            <p className="relative z-0 text-base font-medium text-ca-gold">
+            <p className="text-base font-medium text-ca-gold">
               {status ?? "Importing…"}
             </p>
-            <p className="relative z-0 mt-2 max-w-lg text-xs text-ca-muted">
-              Uploading to cloud storage. Keep this tab open.
+            <p className="mt-2 text-xs text-ca-muted">
+              Keep this tab open while cloud upload finishes.
             </p>
           </>
         ) : dragOver ? (
-          <p className="relative z-0 text-lg font-semibold text-ca-gold">
-            Drop to import
-          </p>
+          <p className="text-lg font-semibold text-ca-gold">Drop to import</p>
         ) : (
           <>
-            <p className="relative z-0 text-sm text-white">
-              Drop files here — or click to browse
+            <p className="text-sm text-white">
+              Drop from Finder here — or click to browse
             </p>
-            <p className="relative z-0 mt-2 max-w-lg text-xs leading-relaxed text-ca-muted">
-              Finder drag works on this box (native file drop). You can also
-              click it like a folder, or use{" "}
-              <span className="text-zinc-300">Import video / audio</span> above.
+            <p className="mt-2 max-w-lg text-xs text-ca-muted">
+              You can also drop anywhere on this Media page. Import buttons stay
+              the most reliable for multi‑GB masters.
             </p>
-            <p className="relative z-0 mt-3 text-[11px] text-zinc-600">
-              {videoOn
-                ? "MP4 · MOV · WAV · MP3 · M4A · AAC"
-                : "WAV · MP3 · M4A · AAC · FLAC"}
-            </p>
-            {!videoOn && (
-              <p className="relative z-0 mt-2 text-xs text-ca-gold/80">
-                Switch top-right to <strong>A + V</strong> to import video.
-              </p>
-            )}
           </>
         )}
       </label>
@@ -208,50 +224,55 @@ export function MediaLibrary() {
           {status}
         </p>
       )}
-
       {error && (
         <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
           {error}
         </p>
       )}
 
-      {videoOn && (
-        <div className="rounded-xl border border-ca-gold/20 bg-ca-gold/5 px-4 py-3 text-sm text-zinc-300">
-          <span className="font-medium text-ca-gold">Next:</span> open{" "}
-          <Link href="/admin/edits" className="text-ca-gold underline">
-            Timeline
-          </Link>{" "}
-          to stack feeds, or{" "}
-          <Link href="/admin/sync-editor" className="text-ca-gold underline">
-            Sync
-          </Link>{" "}
-          for multi-cam offsets.
-        </div>
-      )}
+      <div className="rounded-xl border border-ca-gold/20 bg-ca-gold/5 px-4 py-3 text-sm text-zinc-300">
+        <span className="font-medium text-ca-gold">Use library files:</span>{" "}
+        drag a card onto{" "}
+        <Link href="/admin/edits" className="text-ca-gold underline">
+          Timeline
+        </Link>{" "}
+        (or open Timeline and use “+ Add to timeline”). No re-import required.
+      </div>
 
       {items === null ? (
         <p className="text-sm text-ca-muted">Loading library…</p>
       ) : items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/12 px-6 py-12 text-center">
-          <p className="text-sm text-ca-muted">
-            Library is empty. Drop files on the box above or use Import.
-          </p>
+          <p className="text-sm text-ca-muted">Library is empty.</p>
         </div>
       ) : (
         <div>
           <p className="mb-3 text-xs uppercase tracking-wider text-zinc-500">
             {items.length} file{items.length === 1 ? "" : "s"} in library
             <span className="ml-2 normal-case tracking-normal text-zinc-600">
-              — play audio inline · click card body for full editor
+              — play inline · drag card to Timeline · click title for editor
             </span>
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {items.map((m) => (
               <article
                 key={m.id}
-                className="ca-card ca-card-hover group overflow-hidden p-0"
+                draggable
+                onDragStart={(e) => {
+                  setMediaDragData(e.dataTransfer, {
+                    mediaId: m.id,
+                    kind: m.kind,
+                    title: m.title,
+                  });
+                  e.dataTransfer.setDragImage(
+                    e.currentTarget,
+                    40,
+                    40,
+                  );
+                }}
+                className="ca-card ca-card-hover group cursor-grab overflow-hidden p-0 active:cursor-grabbing"
+                title="Drag to Timeline to add as a feed"
               >
-                {/* Preview is outside the main link so play buttons work */}
                 <MediaCardPreview item={m} />
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-2">
@@ -279,16 +300,11 @@ export function MediaLibrary() {
                     </div>
                     <div className="mt-1 text-xs text-ca-muted">
                       {formatBytes(m.size)}
-                      {m.duration
-                        ? ` · ${Math.floor(m.duration / 60)}:${String(
-                            Math.floor(m.duration % 60),
-                          ).padStart(2, "0")}`
-                        : ""}
                       {" · "}
                       {new Date(m.uploadedAt).toLocaleString()}
                     </div>
-                    <p className="mt-2 text-[11px] text-ca-gold/80">
-                      Open editor →
+                    <p className="mt-2 text-[11px] text-zinc-500">
+                      Drag to Timeline · click for editor
                     </p>
                   </Link>
                 </div>
