@@ -8,8 +8,8 @@ export const site = {
   description:
     "Professional multi-track audio and multi-cam video for live performances — book a shoot, track delivery in your portal, and review masters with the studio.",
   email: "jp@saccapitalaudio.com",
-  phone: "(916) 555-0148",
-  phoneTel: "+19165550148",
+  phone: "916.495.3049",
+  phoneTel: "+19164953049",
   location: "Sacramento, CA · Capital of California · available nationwide",
   sharegridUrl: "https://www.sharegrid.com",
 } as const;

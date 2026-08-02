@@ -73,7 +73,7 @@ export const demoCustomer: PortalCustomer = {
   id: "cust-001",
   name: "Alex Morgan",
   email: "alex.morgan@example.com",
-  phone: "(916) 555-0199",
+  phone: "916.495.3049",
   companyName: "Midtown Live",
 };
 
