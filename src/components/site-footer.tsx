@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { site } from "@/lib/site";
@@ -73,8 +74,31 @@ export function SiteFooter() {
           </p>
         </div>
       </div>
-      <div className="border-t border-white/5 py-5 text-center text-xs text-zinc-600">
-        © {new Date().getFullYear()} {site.name}. All rights reserved.
+
+      <div className="border-t border-white/5">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-6 sm:flex-row sm:px-6">
+          <p className="text-xs text-zinc-600">
+            © {new Date().getFullYear()} {site.name}. All rights reserved.
+          </p>
+          <a
+            href={site.lemonvoiceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.03] px-3.5 py-2 transition-colors hover:border-ca-gold/35 hover:bg-ca-gold/5"
+            title="Built by Lemon Voice"
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500 group-hover:text-zinc-300">
+              Powered by
+            </span>
+            <Image
+              src="/lemonvoice-logo-white.webp"
+              alt="Lemon Voice"
+              width={120}
+              height={28}
+              className="h-5 w-auto opacity-80 transition-opacity group-hover:opacity-100"
+            />
+          </a>
+        </div>
       </div>
     </footer>
   );

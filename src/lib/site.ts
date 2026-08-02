@@ -12,6 +12,8 @@ export const site = {
   phoneTel: "+19164953049",
   location: "Sacramento, CA · Capital of California · available nationwide",
   sharegridUrl: "https://www.sharegrid.com",
+  lemonvoiceUrl: "https://www.lemonvoice.com",
+  lemonvoicePoweredByUrl: "https://www.lemonvoice.com",
 } as const;
 
 export type PackageId =
