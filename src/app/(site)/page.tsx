@@ -9,7 +9,6 @@ import {
   processSteps,
   services,
   site,
-  testimonials,
 } from "@/lib/site";
 
 const audioPackages = packages.filter((p) => p.mode === "audio");
@@ -183,32 +182,6 @@ export default function HomePage() {
                 Cameras · lenses · multi-track recorders · lighting support
               </p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="border-t border-white/8 bg-ca-panel/40">
-        <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-          <SectionHeader
-            eyebrow="Client words"
-            title="Built for artists, venues, and managers"
-          />
-          <div className="mt-12 grid gap-4 md:grid-cols-3">
-            {testimonials.map((t) => (
-              <blockquote key={t.name} className="ca-card flex flex-col p-6">
-                <span className="font-display text-3xl leading-none text-ca-gold/40">
-                  “
-                </span>
-                <p className="mt-2 flex-1 text-sm leading-relaxed text-zinc-300">
-                  {t.quote}
-                </p>
-                <footer className="mt-6 border-t border-white/6 pt-4">
-                  <p className="text-sm font-semibold text-white">{t.name}</p>
-                  <p className="text-xs text-zinc-500">{t.role}</p>
-                </footer>
-              </blockquote>
-            ))}
           </div>
         </div>
       </section>

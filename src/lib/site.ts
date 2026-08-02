@@ -289,27 +289,6 @@ export const processSteps = [
   },
 ];
 
-export const testimonials = [
-  {
-    quote:
-      "They treated our release show like a label session. Multi-cam looked expensive, audio was actually usable, and the turnaround was faster than we expected.",
-    name: "Maya Chen",
-    role: "Artist · indie rock",
-  },
-  {
-    quote:
-      "As a venue, we finally have content we can post without cringing. Capital Audio is our go-to for marquee nights.",
-    name: "Derek Alston",
-    role: "Talent buyer · 400-cap room",
-  },
-  {
-    quote:
-      "ShareGrid gear on every shoot means we never argue about camera quality. They just show up ready.",
-    name: "Priya Nair",
-    role: "Manager · artist roster",
-  },
-];
-
 export function formatMoney(n: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
