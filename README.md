@@ -1,6 +1,6 @@
 # Capital Audio
 
-Professional **multi-track audio** and **multi-cam video** for live performances — marketing site, booking, client portal, and studio tools. Production gear coordinated via [ShareGrid](https://www.sharegrid.com).
+Professional **multi-track audio** and **multi-cam video** for live performances — marketing site, booking, client portal, and studio tools.
 
 Repo: [Coachjohnepop/capital-audio](https://github.com/Coachjohnepop/capital-audio)
 
@@ -22,7 +22,7 @@ Toggle mode in **Studio Admin → Settings** (or the compact control in the admi
 |-------|---------|
 | `/` | Marketing landing |
 | `/packages` | Audio-only and A+V packages |
-| `/gear` | Sample ShareGrid kit catalog |
+| `/gear` | Sample production kit catalog |
 | `/book` | Multi-step booking request |
 | `/about` | Company story & contact |
 
