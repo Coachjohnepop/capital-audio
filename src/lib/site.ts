@@ -7,7 +7,7 @@ export const site = {
   tagline: "Live music, captured properly",
   description:
     "Professional multi-track audio and multi-cam video for live performances — book a shoot, track delivery in your portal, and review masters with the studio.",
-  email: "book@capitalaudio.co",
+  email: "jp@saccapitalaudio.com",
   phone: "(916) 555-0148",
   phoneTel: "+19165550148",
   location: "Sacramento, CA · Capital of California · available nationwide",
