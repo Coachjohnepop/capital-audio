@@ -24,10 +24,9 @@ export default function AboutPage() {
           </p>
           <p>
             We run multi-cam video and multi-track audio for clubs, theaters,
-            houses of worship, festivals, and private events. Production gear is
-            coordinated through ShareGrid so every date has the right cinema
-            bodies, glass, and recorders — without you managing the rental
-            logistics.
+            houses of worship, festivals, and private events. Every date has the
+            right cinema bodies, glass, and recorders — without you managing the
+            rental logistics.
           </p>
           <p>
             Based in the {site.location.split("·")[0].trim()} area and available

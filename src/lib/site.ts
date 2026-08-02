@@ -11,9 +11,7 @@ export const site = {
   phone: "916.495.3049",
   phoneTel: "+19164953049",
   location: "Sacramento, CA · Capital of California · available nationwide",
-  sharegridUrl: "https://www.sharegrid.com",
   lemonvoiceUrl: "https://www.lemonvoice.com",
-  lemonvoicePoweredByUrl: "https://www.lemonvoice.com",
 } as const;
 
 export type PackageId =
@@ -98,7 +96,7 @@ export const packages: CapturePackage[] = [
       "Multi-track board feed + room mics",
       "Up to 2 hours performance time",
       "Edited full performance + social cuts",
-      "ShareGrid-sourced pro kit included",
+      "Pro cinema kit included",
     ],
     idealFor: "Headline nights, album releases, live EPs",
     turnaround: "10–14 business days",
@@ -133,12 +131,11 @@ export interface GearItem {
   category: "Camera" | "Lens" | "Audio" | "Lighting" | "Support";
   dayRate: number;
   note: string;
-  sharegrid: boolean;
   /** Camera / lens / lighting need video mode; audio always available. */
   requiresVideo?: boolean;
 }
 
-/** Representative kit list — sourced via ShareGrid for client shoots */
+/** Representative kit list for client shoots */
 export const gearCatalog: GearItem[] = [
   {
     id: "fx6",
@@ -146,7 +143,6 @@ export const gearCatalog: GearItem[] = [
     category: "Camera",
     dayRate: 175,
     note: "Full-frame 4K, dual ISO — A-cam workhorse",
-    sharegrid: true,
     requiresVideo: true,
   },
   {
@@ -155,7 +151,6 @@ export const gearCatalog: GearItem[] = [
     category: "Camera",
     dayRate: 145,
     note: "Compact RF-mount cinema body",
-    sharegrid: true,
     requiresVideo: true,
   },
   {
@@ -164,7 +159,6 @@ export const gearCatalog: GearItem[] = [
     category: "Lens",
     dayRate: 55,
     note: "Stage-wide to tight performance coverage",
-    sharegrid: true,
     requiresVideo: true,
   },
   {
@@ -173,7 +167,6 @@ export const gearCatalog: GearItem[] = [
     category: "Lens",
     dayRate: 50,
     note: "Tight face / instrument detail from FOH",
-    sharegrid: true,
     requiresVideo: true,
   },
   {
@@ -182,7 +175,6 @@ export const gearCatalog: GearItem[] = [
     category: "Audio",
     dayRate: 45,
     note: "32-bit float multi-track safety",
-    sharegrid: true,
   },
   {
     id: "schoeps",
@@ -190,7 +182,6 @@ export const gearCatalog: GearItem[] = [
     category: "Audio",
     dayRate: 85,
     note: "Room / ambient capture that actually sings",
-    sharegrid: true,
   },
   {
     id: "lav-kit",
@@ -198,7 +189,6 @@ export const gearCatalog: GearItem[] = [
     category: "Audio",
     dayRate: 65,
     note: "Artist talkbacks and stage banter",
-    sharegrid: true,
   },
   {
     id: "aputure",
@@ -206,7 +196,6 @@ export const gearCatalog: GearItem[] = [
     category: "Lighting",
     dayRate: 55,
     note: "Accent / interview key when venue lights fail",
-    sharegrid: true,
     requiresVideo: true,
   },
   {
@@ -215,7 +204,6 @@ export const gearCatalog: GearItem[] = [
     category: "Support",
     dayRate: 30,
     note: "Smooth pans for long sets",
-    sharegrid: true,
     requiresVideo: true,
   },
   {
@@ -224,7 +212,6 @@ export const gearCatalog: GearItem[] = [
     category: "Support",
     dayRate: 40,
     note: "Walking shots through the crowd",
-    sharegrid: true,
     requiresVideo: true,
   },
 ];
@@ -248,8 +235,8 @@ export const services = [
     mode: "audio-video" as CapabilityMode,
   },
   {
-    title: "ShareGrid pro gear",
-    body: "We pull recorders, cinema cameras, and glass from ShareGrid so every shoot has the right kit without bloating your budget.",
+    title: "Pro production kit",
+    body: "We bring the right recorders, cinema cameras, and glass for the room — so every shoot has pro kit without bloating your budget.",
     icon: "gear" as const,
     mode: "audio" as CapabilityMode,
   },
@@ -275,7 +262,7 @@ export const processSteps = [
   {
     n: "02",
     title: "We lock the kit",
-    body: "Recorders (and cameras when you need them) are reserved on ShareGrid — insured and ready.",
+    body: "Recorders (and cameras when you need them) are reserved and ready for your date.",
   },
   {
     n: "03",

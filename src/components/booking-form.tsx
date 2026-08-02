@@ -106,7 +106,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
         <p className="mx-auto mt-3 max-w-md leading-relaxed text-ca-muted">
           Order{" "}
           <span className="font-mono text-ca-gold">{orderId}</span> is in our
-          queue. We&apos;ll confirm crew and ShareGrid kit within one business
+          queue. We&apos;ll confirm crew and kit within one business
           day.
         </p>
         {selected && (

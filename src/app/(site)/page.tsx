@@ -55,18 +55,7 @@ export default function HomePage() {
               View packages
             </Link>
           </div>
-          <p className="mt-8 text-sm text-zinc-400">
-            Pro kit on{" "}
-            <a
-              href={site.sharegridUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-ca-gold hover:underline"
-            >
-              ShareGrid
-            </a>{" "}
-            · {site.location}
-          </p>
+          <p className="mt-8 text-sm text-zinc-400">{site.location}</p>
         </div>
       </section>
 
@@ -148,19 +137,19 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ShareGrid */}
+      {/* Production kit */}
       <section className="border-t border-white/8">
         <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
           <div className="grid items-center gap-10 lg:grid-cols-2">
             <div>
               <p className="ca-eyebrow">Production kit</p>
               <h2 className="mt-2 font-display text-3xl font-semibold text-white sm:text-4xl">
-                Cinema gear via ShareGrid
+                Pro gear matched to the room
               </h2>
               <p className="mt-4 leading-relaxed text-ca-muted">
-                We don&apos;t ask you to rent blindly. Capital Audio coordinates
-                cameras, glass, and multi-track audio through ShareGrid — insured,
-                pro-grade kit matched to the room.
+                We don&apos;t ask you to rent blindly. Capital Audio shows up
+                with cameras, glass, and multi-track audio — insured, pro-grade
+                kit matched to the room.
               </p>
               <Link
                 href="/gear"
@@ -196,8 +185,8 @@ export default function HomePage() {
               Ready to lock a date?
             </h2>
             <p className="relative mt-3 max-w-xl text-ca-muted">
-              Tell us about the show. We&apos;ll confirm crew, ShareGrid kit, and
-              a clear quote — usually within one business day.
+              Tell us about the show. We&apos;ll confirm crew, kit, and a clear
+              quote — usually within one business day.
             </p>
             <div className="relative mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/book" className="ca-btn ca-btn-primary ca-btn-lg">

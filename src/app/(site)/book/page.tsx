@@ -24,7 +24,7 @@ export default async function BookPage({ searchParams }: Props) {
           Book a shoot
         </h1>
         <p className="mt-3 text-ca-muted leading-relaxed">
-          Four quick steps. We confirm crew and ShareGrid kit within one
+          Four quick steps. We confirm crew and kit within one
           business day — no charge until you approve the quote.
         </p>
         <div className="mt-10">

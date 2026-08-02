@@ -4,7 +4,7 @@ import { site } from "@/lib/site";
 
 const explore = [
   { href: "/packages", label: "Packages" },
-  { href: "/gear", label: "Gear · ShareGrid" },
+  { href: "/gear", label: "Gear" },
   { href: "/book", label: "Book a shoot" },
   { href: "/portal", label: "Client portal" },
   { href: "/about", label: "About" },
@@ -58,18 +58,6 @@ export function SiteFooter() {
             >
               {site.phone}
             </a>
-          </p>
-          <p className="mt-6 text-xs leading-relaxed text-zinc-600">
-            Production gear coordinated via{" "}
-            <a
-              href={site.sharegridUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-ca-gold/80 transition-colors hover:text-ca-gold"
-            >
-              ShareGrid
-            </a>
-            .
           </p>
         </div>
       </div>

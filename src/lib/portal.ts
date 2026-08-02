@@ -110,7 +110,7 @@ export const demoProjects: CaptureProject[] = [
     updatedAt: "2026-07-28T11:15:00Z",
     milestones: [
       { id: "m1", label: "Booking confirmed", completedAt: "2026-07-01" },
-      { id: "m2", label: "Kit locked (ShareGrid)", completedAt: "2026-07-12" },
+      { id: "m2", label: "Kit locked", completedAt: "2026-07-12" },
       { id: "m3", label: "Capture night", completedAt: "2026-07-18" },
       { id: "m4", label: "Client review", dueAt: "2026-08-05" },
       { id: "m5", label: "Final masters", dueAt: "2026-08-12" },

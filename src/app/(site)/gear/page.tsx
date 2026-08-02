@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { formatMoney, gearCatalog, site } from "@/lib/site";
+import { formatMoney, gearCatalog } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Gear · ShareGrid",
+  title: "Gear",
   description:
-    "Sample production kit for Capital Audio live captures — cameras, lenses, and multi-track audio coordinated via ShareGrid.",
+    "Sample production kit for Capital Audio live captures — cameras, lenses, and multi-track audio.",
 };
 
 const categories = ["Camera", "Lens", "Audio", "Lighting", "Support"] as const;
@@ -18,25 +18,16 @@ export default function GearPage() {
           Production kit
         </p>
         <h1 className="mt-2 font-display text-4xl font-semibold text-white sm:text-5xl">
-          Gear via ShareGrid
+          Sample gear list
         </h1>
         <p className="mt-4 max-w-2xl text-ca-muted leading-relaxed">
-          We reserve pro cameras, glass, and audio for each shoot through{" "}
-          <a
-            href={site.sharegridUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-ca-gold hover:underline"
-          >
-            ShareGrid
-          </a>
-          . Below is a representative kit list — exact models are locked once
-          your date is confirmed.
+          Pro cameras, glass, and audio for each shoot. Below is a representative
+          kit list — exact models are locked once your date is confirmed.
         </p>
 
         <div className="mt-6 rounded-xl border border-ca-gold/20 bg-ca-gold/5 px-5 py-4 text-sm text-zinc-300">
-          Day rates shown are typical ShareGrid market ranges for client
-          planning. Final kit is included in your package quote.
+          Day rates shown are typical market ranges for client planning. Final
+          kit is included in your package quote.
         </div>
 
         <div className="mt-12 space-y-10">
@@ -69,11 +60,6 @@ export default function GearPage() {
                             <p className="mt-1 text-xs text-zinc-500 sm:hidden">
                               {g.note}
                             </p>
-                            {g.sharegrid && (
-                              <span className="mt-1 inline-block text-[10px] uppercase tracking-wider text-ca-gold/80">
-                                ShareGrid
-                              </span>
-                            )}
                           </td>
                           <td className="hidden px-4 py-4 text-ca-muted sm:table-cell">
                             {g.note}
@@ -96,8 +82,8 @@ export default function GearPage() {
             Need a specific body or glass?
           </h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-ca-muted">
-            Tell us in the booking notes — we&apos;ll check ShareGrid
-            availability for your date.
+            Tell us in the booking notes — we&apos;ll lock the right kit for your
+            date.
           </p>
           <Link
             href="/book"

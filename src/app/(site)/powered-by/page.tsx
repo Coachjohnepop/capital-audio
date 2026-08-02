@@ -33,8 +33,8 @@ const STACK = [
     body: "Audio-only or audio + video packages — never video without usable sound.",
   },
   {
-    title: "ShareGrid kit",
-    body: "Production gear coordinated for each date so crews show up with the right recorders, cameras, and glass.",
+    title: "Production kit",
+    body: "Right recorders, cameras, and glass for each date — crews show up ready for the room.",
   },
 ] as const;
 

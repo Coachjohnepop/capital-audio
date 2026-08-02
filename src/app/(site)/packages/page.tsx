@@ -23,8 +23,8 @@ export default function PackagesPage() {
         </h1>
         <p className="mt-4 max-w-2xl leading-relaxed text-ca-muted">
           Audio-only or audio + video — never video without audio. Every package
-          includes crew, ShareGrid-sourced kit, and masters in your client
-          portal. Travel may apply outside the Sacramento area.
+          includes crew, pro production kit, and masters in your client portal.
+          Travel may apply outside the Sacramento area.
         </p>
 
         <PackageSection title="Audio only" packages={audio} />
