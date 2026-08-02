@@ -8,9 +8,9 @@ export const site = {
   description:
     "Professional multi-track audio and multi-cam video for live performances — book a shoot, track delivery in your portal, and review masters with the studio.",
   email: "book@capitalaudio.co",
-  phone: "(202) 555-0148",
-  phoneTel: "+12025550148",
-  location: "Washington, DC metro · available nationwide",
+  phone: "(916) 555-0148",
+  phoneTel: "+19165550148",
+  location: "Sacramento, CA · Capital of California · available nationwide",
   sharegridUrl: "https://www.sharegrid.com",
 } as const;
 

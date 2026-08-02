@@ -288,7 +288,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, city: e.target.value }))
                   }
-                  placeholder="Washington, DC"
+                  placeholder="Sacramento, CA"
                 />
               </label>
             </div>
