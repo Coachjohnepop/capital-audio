@@ -39,11 +39,15 @@ Toggle mode in **Studio Admin → Settings** (or the compact control in the admi
 | Route | Purpose |
 |-------|---------|
 | `/admin` | Dashboard + mode toggle |
+| `/admin/leads` | Lead gen / pipeline tracking |
+| `/admin/quotes` | Quotes & invoices (rack rate + discounts) |
 | `/admin/media` | Upload / trim / markers / review links |
 | `/admin/sync-editor` | Multi-angle sync (**A+V mode only**) |
 | `/admin/edits` | Timeline edits (audio-only projects get A1/A2) |
 | `/admin/settings` | Studio mode explanation |
 | `/review/[id]` | Client review player |
+
+**Stage Ready multi-cam launch quote:** Admin → Quotes → “Create $700 multi-cam quote” shows rack **$1,890** (Stage Ready package) with a **$1,190** birthday / launch-favor discount to **$700**.
 
 ## Local development
 

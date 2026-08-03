@@ -7,9 +7,11 @@ import { CapabilityToggle } from "@/components/admin/capability-toggle";
 export function AdminNav() {
   const pathname = usePathname();
 
-  // Pipeline: Media → Multicam Sync (Resolve-style) → Timeline
+  // Pipeline: CRM → Media → Multicam → Timeline
   const nav = [
     { href: "/admin", label: "Dashboard", exact: true },
+    { href: "/admin/leads", label: "Leads" },
+    { href: "/admin/quotes", label: "Quotes" },
     { href: "/admin/media", label: "Media" },
     { href: "/admin/sync-editor", label: "Multicam" },
     { href: "/admin/edits", label: "Timeline" },

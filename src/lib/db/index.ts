@@ -165,6 +165,53 @@ export function dbReady(): Promise<void> {
         position INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_sync_angles_project ON sync_angles(project_id);
+      CREATE TABLE IF NOT EXISTS leads (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT,
+        company TEXT,
+        source TEXT NOT NULL DEFAULT 'manual',
+        status TEXT NOT NULL DEFAULT 'new',
+        package_id TEXT,
+        event_date TEXT,
+        venue TEXT,
+        city TEXT,
+        notes TEXT NOT NULL DEFAULT '',
+        booking_ref TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
+      CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+      CREATE INDEX IF NOT EXISTS idx_leads_created ON leads(created_at);
+      CREATE TABLE IF NOT EXISTS quotes (
+        id TEXT PRIMARY KEY,
+        quote_number TEXT NOT NULL,
+        lead_id TEXT REFERENCES leads(id) ON DELETE SET NULL,
+        client_name TEXT NOT NULL,
+        client_email TEXT NOT NULL,
+        client_phone TEXT,
+        company TEXT,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        package_id TEXT,
+        line_items TEXT NOT NULL DEFAULT '[]',
+        rack_subtotal_cents INTEGER NOT NULL DEFAULT 0,
+        discount_cents INTEGER NOT NULL DEFAULT 0,
+        discount_label TEXT,
+        total_cents INTEGER NOT NULL DEFAULT 0,
+        notes TEXT NOT NULL DEFAULT '',
+        terms TEXT NOT NULL DEFAULT '',
+        valid_until TEXT,
+        event_date TEXT,
+        venue TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(status);
+      CREATE INDEX IF NOT EXISTS idx_quotes_lead ON quotes(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_quotes_number ON quotes(quote_number);
     `);
     await importLegacyManifest();
   })();

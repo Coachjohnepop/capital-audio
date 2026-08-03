@@ -140,3 +140,49 @@ export const syncAngles = sqliteTable("sync_angles", {
   offsetMs: integer("offset_ms").notNull().default(0),
   position: integer("position").notNull().default(0),
 });
+
+/** CRM lead — booking form, manual entry, or quote-linked. */
+export const leads = sqliteTable("leads", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  company: text("company"),
+  source: text("source").notNull().default("manual"),
+  status: text("status").notNull().default("new"),
+  packageId: text("package_id"),
+  eventDate: text("event_date"),
+  venue: text("venue"),
+  city: text("city"),
+  notes: text("notes").notNull().default(""),
+  bookingRef: text("booking_ref"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+/** Quote / invoice document with line items + optional launch discount. */
+export const quotes = sqliteTable("quotes", {
+  id: text("id").primaryKey(),
+  quoteNumber: text("quote_number").notNull(),
+  leadId: text("lead_id").references(() => leads.id, { onDelete: "set null" }),
+  clientName: text("client_name").notNull(),
+  clientEmail: text("client_email").notNull(),
+  clientPhone: text("client_phone"),
+  company: text("company"),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("draft"),
+  packageId: text("package_id"),
+  /** JSON array of { id, description, qty, unitPriceCents, amountCents } */
+  lineItems: text("line_items").notNull().default("[]"),
+  rackSubtotalCents: integer("rack_subtotal_cents").notNull().default(0),
+  discountCents: integer("discount_cents").notNull().default(0),
+  discountLabel: text("discount_label"),
+  totalCents: integer("total_cents").notNull().default(0),
+  notes: text("notes").notNull().default(""),
+  terms: text("terms").notNull().default(""),
+  validUntil: text("valid_until"),
+  eventDate: text("event_date"),
+  venue: text("venue"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

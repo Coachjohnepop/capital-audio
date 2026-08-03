@@ -1,18 +1,28 @@
 import Link from "next/link";
 import { formatBytes, listMedia } from "@/lib/media";
+import { listLeads, listQuotes } from "@/lib/crm";
 import { CapabilityToggle } from "@/components/admin/capability-toggle";
 import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
-  const media = await listMedia();
+  const [media, leads, quotes] = await Promise.all([
+    listMedia(),
+    listLeads().catch(() => []),
+    listQuotes().catch(() => []),
+  ]);
   const videos = media.filter((m) => m.kind === "video");
   const audio = media.filter((m) => m.kind === "audio");
   const totalBytes = media.reduce((sum, m) => sum + m.size, 0);
   const recent = media.slice(0, 5);
+  const openLeads = leads.filter(
+    (l) => l.status !== "won" && l.status !== "lost",
+  ).length;
 
   const stats = [
+    { label: "Open leads", value: String(openLeads) },
+    { label: "Quotes", value: String(quotes.length) },
     { label: "Audio files", value: String(audio.length) },
     { label: "Video files", value: String(videos.length) },
     { label: "Storage used", value: formatBytes(totalBytes) },
@@ -38,7 +48,7 @@ export default async function AdminDashboard() {
 
       <CapabilityToggle />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((s) => (
           <div key={s.label} className="ca-card p-5">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
@@ -49,6 +59,23 @@ export default async function AdminDashboard() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Link href="/admin/leads" className="ca-card p-5 transition hover:border-ca-gold/40">
+          <p className="font-display text-lg font-semibold text-white">Leads</p>
+          <p className="mt-1 text-sm text-ca-muted">
+            Track booking inquiries and pipeline status.
+          </p>
+        </Link>
+        <Link href="/admin/quotes" className="ca-card p-5 transition hover:border-ca-gold/40">
+          <p className="font-display text-lg font-semibold text-white">
+            Quotes &amp; invoices
+          </p>
+          <p className="mt-1 text-sm text-ca-muted">
+            Rack rate + launch discount — Stage Ready multi-cam $700 template.
+          </p>
+        </Link>
       </div>
 
       <div className="ca-card p-6">

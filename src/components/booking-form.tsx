@@ -73,7 +73,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
     setStep((s) => Math.min(s + 1, steps.length - 1));
   }
 
-  function submit() {
+  async function submit() {
     if (!validate()) return;
     const id = `CA-${Date.now().toString().slice(-6)}`;
     try {
@@ -90,6 +90,34 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
       localStorage.setItem(BOOKINGS_STORAGE_KEY, JSON.stringify(prev));
     } catch {
       /* demo */
+    }
+    // CRM lead in studio backoffice
+    try {
+      await fetch("/api/admin/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          company: form.company || form.artistOrEvent,
+          source: "booking",
+          packageId: form.packageId || null,
+          eventDate: form.eventDate || null,
+          venue: form.venue || null,
+          city: form.city || null,
+          bookingRef: id,
+          notes: [
+            form.artistOrEvent ? `Event: ${form.artistOrEvent}` : null,
+            form.setLength ? `Set length: ${form.setLength}` : null,
+            form.notes || null,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        }),
+      });
+    } catch {
+      /* offline / CRM optional */
     }
     setOrderId(id);
   }
@@ -432,7 +460,7 @@ export function BookingForm({ defaultPackage }: { defaultPackage?: string }) {
             Continue <IconArrow className="h-4 w-4" />
           </button>
         ) : (
-          <button type="button" onClick={submit} className="ca-btn ca-btn-primary">
+          <button type="button" onClick={() => void submit()} className="ca-btn ca-btn-primary">
             Submit booking request <IconCheck className="h-4 w-4" />
           </button>
         )}
